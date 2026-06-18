@@ -505,6 +505,13 @@ class Database {
     return this.get(KEYS.METER_READINGS) || []
   }
 
+  /**
+   * 获取所有抄表记录（供统计使用）
+   */
+  getAllMeterReadings() {
+    return this.getMeterReadings()
+  }
+
   getMeterReadingsByRoom(roomId) {
     return this.getMeterReadings().filter(r => r.roomId === roomId)
   }
