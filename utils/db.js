@@ -179,11 +179,15 @@ class Database {
     if (!building) return false
     // 检查是否还有房间
     const rooms = this.getRoomsByBuilding(id)
+    // 有房间也允许删除（级联清理所有关联数据）
     if (rooms.length > 0) {
-      return { error: '该楼栋下还有房间，不能删除' }
+      for (const room of rooms) {
+        this._cleanupRoomData(room.id)
+      }
     }
     this.set(KEYS.BUILDINGS, buildings.filter(b => b.id !== id))
-    this.logOperation('删除楼栋', 'building', id, `删除了${building.name}`)
+    this.set(KEYS.ROOMS, this.getRooms().filter(r => r.buildingId !== id))
+    this.logOperation('删除楼栋', 'building', id, `删除了${building.name}${rooms.length ? `及旗下${rooms.length}间房` : ''}`)
     return true
   }
 
@@ -287,6 +291,7 @@ class Database {
 
   /**
    * 删除单个房间（只允许删除空置状态的房间）
+   * 级联清理该房间关联的数据：账单、抄表记录、退租记录
    */
   deleteRoom(id) {
     const rooms = this.getRooms()
@@ -295,6 +300,10 @@ class Database {
     if (room.status !== '空置') {
       return { error: `房间 ${room.roomNumber} 当前状态为"${room.status}"，无法删除。只能删除空置中的房间。` }
     }
+
+    // 级联清理关联数据
+    this._cleanupRoomData(id)
+
     this.set(KEYS.ROOMS, rooms.filter(r => r.id !== id))
     this.logOperation('删除房间', 'room', id, `${room.floor}层 ${room.roomNumber}`)
     return true
@@ -303,6 +312,7 @@ class Database {
   /**
    * 批量删除房间（只允许删除空置状态的房间）
    * 返回 { success: [...], failed: [{id, roomNumber, reason}] }
+   * 级联清理每个房间关联的数据
    */
   deleteRooms(ids) {
     const rooms = this.getRooms()
@@ -321,6 +331,8 @@ class Database {
         keepIds.add(id)
         continue
       }
+      // 级联清理该房间的关联数据
+      this._cleanupRoomData(id)
       success.push(room)
     }
 
@@ -332,6 +344,36 @@ class Database {
     }
 
     return { success, failed }
+  }
+
+  /**
+   * 级联清理房间关联数据（账单、抄表记录、退租记录）
+   * @param {string} roomId - 被删除的房间ID
+   */
+  _cleanupRoomData(roomId) {
+    // 清理该房间的所有账单
+    const bills = this.getBills()
+    const remainingBills = bills.filter(b => b.roomId !== roomId)
+    if (remainingBills.length < bills.length) {
+      this.set(KEYS.BILLS, remainingBills)
+    }
+
+    // 清理该房间的所有抄表记录
+    const readings = this.getMeterReadings()
+    const remainingReadings = readings.filter(r => r.roomId !== roomId)
+    if (remainingReadings.length < readings.length) {
+      this.set(KEYS.METER_READINGS, remainingReadings)
+    }
+
+    // 清理该房间的退租记录
+    const checkouts = this.get(KEYS.CHECKOUT_RECORDS) || []
+    const remainingCheckouts = checkouts.filter(c => c.roomId !== roomId)
+    if (remainingCheckouts.length < checkouts.length) {
+      this.set(KEYS.CHECKOUT_RECORDS, remainingCheckouts)
+    }
+
+    // 注意：合同和租客不在此清理，因为租客可能还有其他房间
+    // 合同会因找不到房间而在首页被过滤
   }
 
   /**
@@ -893,22 +935,30 @@ class Database {
 
   /**
    * 获取首页看板数据
+   * 过滤掉已删除房间的脏数据
    */
   getDashboardData() {
     const now = new Date()
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 
-    // 今日待办
-    const expiringContracts = this.getExpiringContracts(30)
-    const overdueBills = this.getOverdueBills()
+    // 当前存在的房间ID集合（用于过滤脏数据）
+    const existingRoomIds = new Set(this.getRooms().map(r => r.id))
+
+    // 今日待办（只保留房间仍存在的数据）
+    const allExpiringContracts = this.getExpiringContracts(30)
+    const expiringContracts = allExpiringContracts.filter(c => existingRoomIds.has(c.roomId))
+
+    const allOverdueBills = this.getOverdueBills()
+    const overdueBills = allOverdueBills.filter(b => existingRoomIds.has(b.roomId))
 
     // 资金流水
     const monthBills = this.getBillsByMonth(currentMonth)
     const totalReceived = monthBills.filter(b => b.status === '已支付').reduce((sum, b) => sum + b.totalAmount + b.lateFee, 0)
     const totalPending = monthBills.filter(b => b.status !== '已支付').reduce((sum, b) => sum + b.totalAmount, 0)
 
-    // 异常预警
-    const anomalyReadings = this.getMeterReadings().filter(r => r.isAnomaly && !r.isAnomalyConfirmed)
+    // 异常预警（也过滤已删除房间的数据）
+    const allAnomalyReadings = this.getMeterReadings().filter(r => r.isAnomaly && !r.isAnomalyConfirmed)
+    const anomalyReadings = allAnomalyReadings.filter(r => existingRoomIds.has(r.roomId))
 
     // 房间统计
     const rooms = this.getRooms()
