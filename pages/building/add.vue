@@ -9,7 +9,11 @@
     <!-- 步骤 1：楼栋信息 -->
     <view class="card" v-if="step === 1">
       <view class="card-title">楼栋信息</view>
-      <view class="form-row">
+      <view class="form-row" v-if="existingBuildingId">
+        <text class="form-label">楼栋名称</text>
+        <text class="form-value">{{ buildingName }}</text>
+      </view>
+      <view class="form-row" v-else>
         <text class="form-label">楼栋名称</text>
         <input
           class="form-input"
@@ -22,12 +26,16 @@
         <text class="form-label">描述（可选）</text>
         <input
           class="form-input"
+          :disabled="!!existingBuildingId"
           v-model="buildingDesc"
           placeholder="备注信息"
           maxlength="50"
         />
       </view>
-      <view class="btn-big btn-primary" @click="nextStep">下一步</view>
+      <view class="btn-big btn-primary" @click="nextStep">{{ existingBuildingId ? '下一步（添加房间到此楼栋）' : '下一步' }}</view>
+      <view style="margin-top: 8px;" v-if="existingBuildingId">
+        <view class="btn-big btn-default" @click="goBack">取消返回</view>
+      </view>
     </view>
 
     <!-- 步骤 2：选择生成方式 -->
@@ -225,6 +233,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
 import db from '@/utils/db.js'
 import { formatAmount } from '@/utils/calc.js'
 
@@ -234,6 +243,7 @@ const step = ref(1)
 const buildingName = ref('')
 const buildingDesc = ref('')
 const mode = ref('batch')
+const existingBuildingId = ref('')  // 传入的已有楼栋ID，为空则新建
 
 const startFloor = ref(1)
 const endFloor = ref(16)
@@ -315,6 +325,22 @@ function resetUnitTemplates() {
 
 watch(roomsPerFloor, resetUnitTemplates, { immediate: true })
 
+// ============ 页面初始化 ============
+
+onLoad((options) => {
+  // 如果传了 buildingId，说明是给已有楼栋添加房间
+  if (options.buildingId) {
+    existingBuildingId.value = options.buildingId
+    const building = db.getBuildingById(options.buildingId)
+    if (building) {
+      buildingName.value = building.name
+      buildingDesc.value = building.description || ''
+      // 直接跳到步骤2（选择生成方式）
+      step.value = 1
+    }
+  }
+})
+
 // ============ 辅助方法 ============
 
 function unitTypeIndex(type) {
@@ -354,7 +380,7 @@ function onTemplateTypeChange(index, e) {
 }
 
 function saveBatch() {
-  if (!buildingName.value.trim()) {
+  if (!existingBuildingId.value && !buildingName.value.trim()) {
     uni.showToast({ title: '请输入楼栋名称', icon: 'none' })
     return
   }
@@ -371,10 +397,21 @@ function saveBatch() {
     return
   }
 
-  const building = db.addBuilding({
-    name: buildingName.value.trim(),
-    description: buildingDesc.value.trim()
-  })
+  let building
+  if (existingBuildingId.value) {
+    // 给已有楼栋添加房间
+    building = db.getBuildingById(existingBuildingId.value)
+  } else {
+    // 新建楼栋
+    building = db.addBuilding({
+      name: buildingName.value.trim(),
+      description: buildingDesc.value.trim()
+    })
+    if (building.error) {
+      uni.showToast({ title: building.error, icon: 'none' })
+      return
+    }
+  }
 
   const floorConfigs = previewFloors.value.map(f => ({
     floor: f.floor,
@@ -426,8 +463,12 @@ function removeManualRoom(index) {
   manualRooms.value.splice(index, 1)
 }
 
+function goBack() {
+  uni.navigateBack()
+}
+
 function saveManual() {
-  if (!buildingName.value.trim()) {
+  if (!existingBuildingId.value && !buildingName.value.trim()) {
     uni.showToast({ title: '请输入楼栋名称', icon: 'none' })
     return
   }
@@ -436,10 +477,19 @@ function saveManual() {
     return
   }
 
-  const building = db.addBuilding({
-    name: buildingName.value.trim(),
-    description: buildingDesc.value.trim()
-  })
+  let building
+  if (existingBuildingId.value) {
+    building = db.getBuildingById(existingBuildingId.value)
+  } else {
+    building = db.addBuilding({
+      name: buildingName.value.trim(),
+      description: buildingDesc.value.trim()
+    })
+    if (building.error) {
+      uni.showToast({ title: building.error, icon: 'none' })
+      return
+    }
+  }
 
   for (const room of manualRooms.value) {
     db.addRoom({
@@ -530,6 +580,16 @@ function saveManual() {
   border-radius: 8px;
   padding: 0 12px;
   font-size: 16px;
+  text-align: right;
+}
+
+.form-value {
+  flex: 1;
+  height: 44px;
+  line-height: 44px;
+  font-size: 16px;
+  color: #333333;
+  font-weight: 600;
   text-align: right;
 }
 

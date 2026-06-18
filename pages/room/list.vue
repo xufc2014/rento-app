@@ -48,6 +48,19 @@
 
     <!-- 楼层房间列表 -->
     <view v-if="buildings.length > 0">
+      <!-- 楼栋无房间空状态 -->
+      <view class="card empty-card" v-if="rooms.length === 0 && buildings.find(b => b.id === activeBuildingId)">
+        <text class="empty-icon">&#128718;</text>
+        <text class="empty-text">{{ currentBuildingName }} 暂无房间</text>
+        <text class="empty-tip">删除了所有房间？可以重新添加或删除此楼栋</text>
+        <view class="empty-actions">
+          <view class="btn-big btn-primary" style="margin-right: 10px; flex:1;" @click="goAddRoomsToBuilding">添加房间</view>
+          <view class="btn-big btn-danger" style="flex:1;" @click="confirmDeleteBuilding">删除楼栋</view>
+        </view>
+      </view>
+
+      <!-- 有房间时正常显示楼层列表 -->
+      <template v-else>
       <view class="floor-section" v-for="group in groupedRooms" :key="group.floor">
         <view class="floor-header">
           <text class="floor-title">{{ formatFloor(group.floor) }}</text>
@@ -93,6 +106,7 @@
           </view>
         </view>
       </view>
+      </template>
     </view>
 
     <!-- 底部占位 -->
@@ -100,7 +114,13 @@
 
     <!-- 底部添加楼栋按钮（非编辑模式） -->
     <view class="footer-bar" v-if="!editMode">
-      <view class="btn-big btn-primary" @click="goAddBuilding">添加楼栋</view>
+      <view v-if="rooms.length > 0 || buildings.find(b => b.id === activeBuildingId) === undefined">
+        <view class="btn-big btn-primary" @click="goAddBuilding">添加楼栋</view>
+      </view>
+      <view v-else>
+        <view class="btn-big btn-primary" @click="goAddRoomsToBuilding">添加房间</view>
+        <view class="btn-big btn-danger" style="margin-top: 10px;" @click="confirmDeleteBuilding">删除此楼栋</view>
+      </view>
     </view>
   </view>
 </template>
@@ -199,6 +219,28 @@ function goRoomDetail(roomId) {
 
 function goAddBuilding() {
   uni.navigateTo({ url: '/pages/building/add' })
+}
+
+function goAddRoomsToBuilding() {
+  uni.navigateTo({ url: `/pages/building/add?buildingId=${activeBuildingId.value}` })
+}
+
+function confirmDeleteBuilding() {
+  const building = buildings.value.find(b => b.id === activeBuildingId.value)
+  uni.showModal({
+    title: '删除楼栋',
+    content: `确定要删除"${building.name}"吗？该楼栋已无房间，删除后无法恢复！`,
+    confirmColor: '#FF3B30',
+    confirmText: '确认删除',
+    cancelText: '取消',
+    success(res) {
+      if (res.confirm) {
+        db.deleteBuilding(activeBuildingId.value)
+        uni.showToast({ title: '楼栋已删除', icon: 'success' })
+        loadData()
+      }
+    }
+  })
 }
 
 function formatFloor(floor) {
@@ -443,6 +485,13 @@ function doDelete() {
   color: #999999;
 }
 
+.empty-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+  width: 100%;
+}
+
 /* 楼层 */
 .floor-section {
   margin-bottom: 16px;
@@ -618,6 +667,11 @@ function doDelete() {
 
 .btn-primary {
   background-color: #007AFF;
+  color: #ffffff;
+}
+
+.btn-danger {
+  background-color: #FF3B30;
   color: #ffffff;
 }
 </style>

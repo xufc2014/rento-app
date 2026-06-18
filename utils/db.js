@@ -142,6 +142,11 @@ class Database {
 
   addBuilding(building) {
     const buildings = this.getBuildings()
+    // 检查楼栋名是否重复
+    const dup = buildings.find(b => b.name === building.name.trim())
+    if (dup) {
+      return { error: '楼栋名称已存在', duplicateId: dup.id }
+    }
     const newBuilding = {
       id: generateId(),
       name: building.name,
@@ -152,6 +157,10 @@ class Database {
     this.set(KEYS.BUILDINGS, buildings)
     this.logOperation('添加楼栋', 'building', newBuilding.id, `添加了${building.name}`)
     return newBuilding
+  }
+
+  getBuildingById(id) {
+    return this.getBuildings().find(b => b.id === id) || null
   }
 
   updateBuilding(id, updates) {
