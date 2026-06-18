@@ -146,7 +146,7 @@
       <text class="done-amount" :class="totalReturn >= 0 ? 'amount-green' : 'amount-red'">
         {{ formatAmount(totalReturn) }}
       </text>
-      <text class="done-hint">房间状态已变更为"退租中"</text>
+      <text class="done-hint">房间已变为"空置"状态，可重新出租</text>
       <view class="btn-big btn-primary" style="margin-top: 24px;" @click="goBack">返回</view>
     </view>
   </view>

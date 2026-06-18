@@ -257,10 +257,10 @@ export default {
     },
     onDelete() {
       const room = this.room
-      if (room.status !== '空置') {
+      if (room.status !== '空置' && room.status !== '退租中') {
         uni.showModal({
           title: '无法删除',
-          content: `当前房间状态为"${room.status}"，只有空置状态的房间才能删除。`,
+          content: `当前房间状态为"${room.status}"，只有空置或退租中的房间才能删除。`,
           showCancel: false
         })
         return

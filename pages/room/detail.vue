@@ -156,6 +156,8 @@
         <view class="btn-big btn-primary" @click="goBills">查看账单</view>
         <view class="btn-big btn-success" v-if="room.status === '空置'" @click="goContract">签订合同</view>
         <view class="btn-big btn-warning" v-if="room.status === '已入住'" @click="goCheckout">退租结算</view>
+        <view class="btn-big btn-warning" v-if="room.status === '退租中'" @click="markVacant">标记为空置</view>
+        <view class="btn-big btn-danger" v-if="room.status === '退租中' || room.status === '空置'" @click="deleteRoom">删除房间</view>
         <view class="btn-big btn-primary" @click="goEdit">编辑房间</view>
       </view>
     </view>
@@ -273,6 +275,50 @@ function goCheckout() {
 
 function goEdit() {
   uni.navigateTo({ url: `/pages/room/edit?roomId=${roomId.value}` })
+}
+
+function markVacant() {
+  uni.showModal({
+    title: '确认',
+    content: '确定将该房间标记为"空置"吗？',
+    confirmText: '确认',
+    cancelText: '取消',
+    success: (res) => {
+      if (res.confirm) {
+        db.updateRoom(roomId.value, {
+          status: '空置',
+          currentTenantId: null,
+          currentContractId: null
+        })
+        loadData()
+        uni.showToast({ title: '已标记为空置', icon: 'success' })
+      }
+    }
+  })
+}
+
+function deleteRoom() {
+  const r = room.value
+  uni.showModal({
+    title: '确认删除',
+    content: `确定要删除 ${r.floor}层 ${r.roomNumber} 吗？删除后无法恢复！`,
+    confirmColor: '#FF3B30',
+    confirmText: '确认删除',
+    cancelText: '取消',
+    success: (res) => {
+      if (res.confirm) {
+        const result = db.deleteRoom(r.id)
+        if (result === true) {
+          uni.showToast({ title: '已删除', icon: 'success' })
+          setTimeout(() => {
+            uni.navigateBack()
+          }, 800)
+        } else {
+          uni.showToast({ title: result.error || '删除失败', icon: 'none' })
+        }
+      }
+    }
+  })
 }
 </script>
 

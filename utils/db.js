@@ -821,9 +821,9 @@ class Database {
       this.set(KEYS.CONTRACTS, contracts)
     }
 
-    // 房间变为空置（待清洁）
+    // 房间变为空置，退租结算已完成
     this.updateRoom(data.roomId, {
-      status: '退租中',  // 先进入退租中，结算完成后手动改为空置
+      status: '空置',
       currentTenantId: null,
       currentContractId: null
     })
