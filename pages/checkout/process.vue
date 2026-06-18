@@ -94,6 +94,11 @@
     <view class="card" v-if="currentStep === 3">
       <view class="form-label">退租结算明细</view>
 
+      <!-- 当月账单重复提示 -->
+      <view class="warn-banner" v-if="currentMonthBill">
+        <text class="warn-text">⚠️ 当月已有账单(¥{{ currentMonthBill.totalAmount }})，水电费请勿重复扣款</text>
+      </view>
+
       <view class="settle-row">
         <text class="settle-label">基础押金</text>
         <text class="settle-value amount-green">{{ formatAmount(depositAmount) }}</text>
@@ -207,6 +212,14 @@ const electricUsage = computed(() => {
 const repairDeductionNum = computed(() => Number(repairDeduction.value) || 0)
 const unpaidRentNum = computed(() => Number(unpaidRent.value) || 0)
 
+// 当月账单检查（防止水电费重复收取）
+const currentMonthBill = computed(() => {
+  if (!roomId.value) return null
+  const now = new Date()
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  return db.getBillsByRoom(roomId.value).find(b => b.month === currentMonth && b.status !== '已支付') || null
+})
+
 onLoad((options) => {
   if (options.roomId) {
     roomId.value = options.roomId
@@ -250,6 +263,21 @@ function loadRoomData() {
 }
 
 function nextStep() {
+  if (currentStep.value === 0) {
+    // 检查当月是否已有账单（水电费可能重复收取）
+    const now = new Date()
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    const existingBill = db.getBillsByRoom(roomId.value).find(b => b.month === currentMonth)
+    if (existingBill && existingBill.status !== '已支付') {
+      uni.showModal({
+        title: '⚠️ 当月账单已存在',
+        content: `${currentMonth}月已生成账单（¥${existingBill.totalAmount}，状态：${existingBill.status}），其中包含水电费。退租结算再次收取水电费会导致重复扣款。\n\n建议：先标记当月账单为已支付，或手动将退租水电费设为0。`,
+        confirmText: '我知道了',
+        showCancel: false
+      })
+    }
+  }
+
   if (currentStep.value === 1) {
     // 验证水电读数
     if (!finalWaterReading.value && !finalElectricReading.value) {
@@ -565,5 +593,19 @@ function goBack() {
 
 .amount-green {
   color: #34C759;
+}
+
+.warn-banner {
+  background-color: #FFF3E0;
+  border: 1px solid #FF9500;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+}
+
+.warn-text {
+  font-size: 14px;
+  color: #E65100;
+  font-weight: 600;
 }
 </style>

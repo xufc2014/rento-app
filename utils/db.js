@@ -550,18 +550,18 @@ class Database {
     contracts[idx].status = '已续签'
     this.set(KEYS.CONTRACTS, contracts)
 
-    // 创建新合同（继承旧合同的额外押金）
+    // 创建新合同（继承旧合同，但允许调整押金）
     const newContract = {
       id: generateId(),
       roomId: oldContract.roomId,
       tenantId: oldContract.tenantId,
       startDate: newContractData.startDate,
       endDate: newContractData.endDate,
-      depositAmount: oldContract.depositAmount,
-      depositRule: oldContract.depositRule,
+      depositAmount: newContractData.depositAmount != null ? newContractData.depositAmount : oldContract.depositAmount,
+      depositRule: newContractData.depositRule || oldContract.depositRule,
       rentAmount: newContractData.rentAmount || oldContract.rentAmount,
-      extraDeposit: oldContract.extraDeposit || 0,
-      extraDepositNote: oldContract.extraDepositNote || '',
+      extraDeposit: newContractData.extraDeposit != null ? newContractData.extraDeposit : (oldContract.extraDeposit || 0),
+      extraDepositNote: newContractData.extraDepositNote != null ? newContractData.extraDepositNote : (oldContract.extraDepositNote || ''),
       status: '活跃',
       parentId: contractId,
       createdAt: new Date().toISOString()

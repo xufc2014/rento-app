@@ -34,6 +34,7 @@
         </view>
         <view class="contract-bottom">
           <text class="contract-rent">月租 {{ formatAmount(item.rentAmount) }}</text>
+          <text class="contract-deposit">押金 {{ formatAmount(item.depositAmount + (item.extraDeposit || 0)) }}</text>
           <text class="contract-expire" v-if="item.expireDesc" :class="{ 'expire-warn': item.isExpiring }">
             {{ item.expireDesc }}
           </text>
@@ -232,6 +233,12 @@ function goAddContract() {
   font-size: 15px;
   font-weight: 600;
   color: #007AFF;
+}
+
+.contract-deposit {
+  font-size: 14px;
+  color: #FF9500;
+  font-weight: 600;
 }
 
 .contract-expire {

@@ -149,8 +149,33 @@
           <view class="quick-date-btn" @click="setRenewQuick(24)">两年</view>
         </view>
 
-        <view class="form-label" style="margin-top: 16px;">月租金（可微调）</view>
+        <view class="form-label" style="margin-top: 16px;">月租金</view>
         <input class="input-big" type="digit" v-model="renewRentAmount" />
+
+        <view class="form-label" style="margin-top: 16px;">押金规则</view>
+        <view class="rule-list">
+          <view
+            class="rule-item"
+            v-for="rule in depositRules"
+            :key="rule"
+            :class="{ active: renewDepositRule === rule }"
+            @click="renewDepositRule = rule"
+          >
+            <text class="rule-text">{{ rule }}</text>
+          </view>
+        </view>
+
+        <view class="form-label" style="margin-top: 16px;">基础押金（自动计算）</view>
+        <text class="deposit-display">{{ formatAmount(calcRenewBaseDeposit) }}</text>
+
+        <view class="form-label" style="margin-top: 12px;">额外押金</view>
+        <input class="input-big" type="digit" v-model="renewExtraDeposit" placeholder="0" />
+
+        <view class="form-label" style="margin-top: 8px;">额外押金说明</view>
+        <input class="input-big" v-model="renewExtraDepositNote" placeholder="选填" />
+
+        <view class="form-label" style="margin-top: 12px;">总押金</view>
+        <text class="deposit-display deposit-total">{{ formatAmount(calcRenewTotalDeposit) }}</text>
 
         <view class="btn-big btn-primary" style="margin-top: 20px;" @click="doRenew">确认续签</view>
         <view class="btn-big btn-secondary" style="margin-top: 10px;" @click="showRenewPanel = false">取消</view>
@@ -189,6 +214,24 @@ const showRenewPanel = ref(false)
 const renewStartDate = ref('')
 const renewEndDate = ref('')
 const renewRentAmount = ref('')
+const renewDepositRule = ref('')
+const renewExtraDeposit = ref('')
+const renewExtraDepositNote = ref('')
+
+const depositRules = ['押一付一', '押二付一', '押一付三']
+
+// 续签押金计算
+const calcRenewBaseDeposit = computed(() => {
+  const rent = Number(renewRentAmount.value) || 0
+  if (renewDepositRule.value === '押一付一') return rent * 1
+  if (renewDepositRule.value === '押二付一') return rent * 2
+  if (renewDepositRule.value === '押一付三') return rent * 1
+  return rent
+})
+
+const calcRenewTotalDeposit = computed(() => {
+  return calcRenewBaseDeposit.value + (Number(renewExtraDeposit.value) || 0)
+})
 
 // 编辑模式押金计算
 const calcEditBaseDeposit = computed(() => {
@@ -260,6 +303,9 @@ function loadContract() {
   // 初始化续签数据
   renewStartDate.value = c.endDate
   renewRentAmount.value = String(c.rentAmount)
+  renewDepositRule.value = c.depositRule
+  renewExtraDeposit.value = c.extraDeposit ? String(c.extraDeposit) : ''
+  renewExtraDepositNote.value = c.extraDepositNote || ''
 }
 
 function startEdit() {
@@ -332,7 +378,11 @@ function doRenew() {
   const result = db.renewContract(contractId.value, {
     startDate: renewStartDate.value,
     endDate: renewEndDate.value,
-    rentAmount: Number(renewRentAmount.value) || contract.value.rentAmount
+    rentAmount: Number(renewRentAmount.value) || contract.value.rentAmount,
+    depositRule: renewDepositRule.value,
+    depositAmount: calcRenewBaseDeposit.value,
+    extraDeposit: Number(renewExtraDeposit.value) || 0,
+    extraDepositNote: renewExtraDepositNote.value
   })
 
   if (result.error) {
