@@ -5,6 +5,7 @@
  */
 
 import { generateId } from './uuid.js'
+import { calcUtilityFee } from './calc.js'
 
 // 存储键名定义
 const KEYS = {
@@ -666,11 +667,10 @@ class Database {
     if (!contract) return { error: '该房间没有活跃合同' }
 
     const settings = this.getSettings()
-    const calc = require('./calc.js')
 
     // 计算水电费
-    const waterFee = calc.calcUtilityFee(roomId, 'water', month, this)
-    const electricFee = calc.calcUtilityFee(roomId, 'electric', month, this)
+    const waterFee = calcUtilityFee(roomId, 'water', month, this)
+    const electricFee = calcUtilityFee(roomId, 'electric', month, this)
 
     const rentAmount = contract.rentAmount
     const internetFee = room.internetFee || settings.internetFee
@@ -774,9 +774,8 @@ class Database {
     const settings = this.getSettings()
 
     // 获取最终水电读数
-    const calc = require('./calc.js')
-    const waterFee = calc.calcUtilityFee(data.roomId, 'water', null, this)
-    const electricFee = calc.calcUtilityFee(data.roomId, 'electric', null, this)
+    const waterFee = calcUtilityFee(data.roomId, 'water', null, this)
+    const electricFee = calcUtilityFee(data.roomId, 'electric', null, this)
 
     const repairDeduction = data.repairDeduction || 0
     const unpaidRent = data.unpaidRent || 0
