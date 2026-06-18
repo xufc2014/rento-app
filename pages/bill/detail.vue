@@ -173,9 +173,12 @@ function togglePaid() {
     if (idx !== -1) {
       bills[idx].status = '未支付'
       bills[idx].paidAt = null
+      bills[idx].lateFee = 0  // 重置滞纳金
       db.set('rento_bills', bills)
+      db.logOperation('取消支付标记', 'bill', billId.value, `¥${bills[idx].totalAmount}`)
       bill.value.status = '未支付'
       bill.value.paidAt = null
+      bill.value.lateFee = 0
     }
     uni.showToast({ title: '已标记为未支付', icon: 'none' })
   } else {

@@ -47,7 +47,7 @@
             <text class="room-label">{{ room.floor }}-{{ room.roomNumber }}</text>
             <text class="room-tenant">{{ tenantName(room.currentTenantId) }}</text>
           </view>
-          <text class="room-rent">{{ formatAmount(room.baseRent) }}/月</text>
+          <text class="room-rent">{{ formatAmount(getContractRent(room.id)) }}/月</text>
         </view>
       </view>
       <text class="empty-hint" v-else>该楼栋暂无已入住房间</text>
@@ -148,6 +148,13 @@ function toggleAll() {
 function tenantName(tenantId) {
   const t = db.getTenantById(tenantId)
   return t ? t.name : ''
+}
+
+function getContractRent(roomId) {
+  const room = db.getRoomById(roomId)
+  if (!room || !room.currentContractId) return room ? room.baseRent : 0
+  const contract = db.getContractById(room.currentContractId)
+  return contract ? contract.rentAmount : (room.baseRent || 0)
 }
 
 function doGenerate() {

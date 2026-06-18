@@ -282,9 +282,18 @@ class Database {
     const old = rooms[idx]
     rooms[idx] = { ...rooms[idx], ...updates }
     this.set(KEYS.ROOMS, rooms)
-    // 修改租金时记录日志
+    // 修改租金时记录日志，并同步到活跃合同
     if (updates.baseRent !== undefined && updates.baseRent !== old.baseRent) {
       this.logOperation('修改租金', 'room', id, `${old.floor}-${old.roomNumber}: ${old.baseRent} → ${updates.baseRent}`)
+      // 同步租金到该房间的活跃合同
+      if (old.currentContractId) {
+        const contracts = this.getContracts()
+        const cIdx = contracts.findIndex(c => c.id === old.currentContractId && c.status === '活跃')
+        if (cIdx !== -1) {
+          contracts[cIdx].rentAmount = updates.baseRent
+          this.set(KEYS.CONTRACTS, contracts)
+        }
+      }
     }
     return rooms[idx]
   }
@@ -515,11 +524,12 @@ class Database {
     contracts.push(newContract)
     this.set(KEYS.CONTRACTS, contracts)
 
-    // 更新房间状态
+    // 更新房间状态和租金
     this.updateRoom(contract.roomId, {
       status: '已入住',
       currentTenantId: contract.tenantId,
-      currentContractId: newContract.id
+      currentContractId: newContract.id,
+      baseRent: newContract.rentAmount  // 签订合同时同步租金到房间
     })
 
     this.logOperation('签订合同', 'contract', newContract.id,
@@ -559,9 +569,10 @@ class Database {
     contracts.push(newContract)
     this.set(KEYS.CONTRACTS, contracts)
 
-    // 更新房间关联
+    // 更新房间关联和租金
     this.updateRoom(oldContract.roomId, {
-      currentContractId: newContract.id
+      currentContractId: newContract.id,
+      baseRent: newContract.rentAmount  // 续签时同步新租金到房间
     })
 
     this.logOperation('续签合同', 'contract', newContract.id,
@@ -900,8 +911,10 @@ class Database {
     if (contract) {
       const contracts = this.getContracts()
       const idx = contracts.findIndex(c => c.id === contract.id)
-      contracts[idx].status = '历史'
-      this.set(KEYS.CONTRACTS, contracts)
+      if (idx !== -1) {
+        contracts[idx].status = '历史'
+        this.set(KEYS.CONTRACTS, contracts)
+      }
     }
 
     // 房间变为空置，退租结算已完成

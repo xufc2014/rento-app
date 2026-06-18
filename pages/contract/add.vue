@@ -310,7 +310,12 @@ function goAddTenant() {
 function setQuickDate(months) {
   const start = startDate.value ? new Date(startDate.value) : new Date()
   const end = new Date(start)
+  const targetMonth = (start.getMonth() + months) % 12
   end.setMonth(end.getMonth() + months)
+  // 处理月份溢出（如1月31日+1个月会溢出到3月3日）
+  if (end.getMonth() !== targetMonth) {
+    end.setDate(0)  // 回退到上个月最后一天
+  }
   startDate.value = formatDateStr(start)
   endDate.value = formatDateStr(end)
 }

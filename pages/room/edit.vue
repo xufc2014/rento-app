@@ -212,12 +212,12 @@ export default {
       this.form = {
         roomNumber: r.roomNumber || '',
         unitType: r.unitType || '民房',
-        area: r.area ? String(r.area) : '',
-        baseRent: r.baseRent ? String(r.baseRent) : '',
+        area: r.area != null ? String(r.area) : '',
+        baseRent: r.baseRent != null ? String(r.baseRent) : '',
         waterRate: r.waterRate ? String(r.waterRate) : '',
         electricRate: r.electricRate ? String(r.electricRate) : '',
         internetFee: r.internetFee ? String(r.internetFee) : '',
-        extraDeposit: r.extraDeposit ? String(r.extraDeposit) : '',
+        extraDeposit: r.extraDeposit != null ? String(r.extraDeposit) : '',
         extraDepositNote: r.extraDepositNote || '',
         notes: r.notes || ''
       }

@@ -324,6 +324,10 @@ function doRenew() {
     uni.showToast({ title: '请选择日期', icon: 'none' })
     return
   }
+  if (new Date(renewEndDate.value) <= new Date(renewStartDate.value)) {
+    uni.showToast({ title: '结束日期必须晚于开始日期', icon: 'none' })
+    return
+  }
 
   const result = db.renewContract(contractId.value, {
     startDate: renewStartDate.value,
