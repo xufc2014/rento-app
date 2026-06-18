@@ -437,7 +437,15 @@ function closeAnomalyModal() {
 
 function forceConfirm() {
   showAnomalyModal.value = false
-  // 标记已确认，直接提交
+  // 水表异常已确认，继续检查电表异常
+  if (!pendingForceConfirmElectric && electricValue.value !== null && electricLastReading.value !== null) {
+    if (checkAnomaly('electric')) {
+      pendingForceConfirmWater = true  // 水表已确认
+      showAnomalyModal.value = true
+      return
+    }
+  }
+  // 所有异常都已确认，提交
   doSubmit(true)
 }
 

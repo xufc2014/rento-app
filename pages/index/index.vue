@@ -108,7 +108,7 @@
 
 <script setup>
 import { ref, reactive, computed } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
 import db from '@/utils/db.js'
 import { formatDateCN, getRelativeDaysDesc } from '@/utils/date.js'
 import { formatAmount } from '@/utils/calc.js'
@@ -214,11 +214,11 @@ onShow(() => {
   loadData()
 })
 
-// 下拉刷新（uni-app 生命周期，必须在 script setup 顶级定义）
-const onPullDownRefresh = () => {
+// 下拉刷新
+onPullDownRefresh(() => {
   loadData()
   uni.stopPullDownRefresh()
-}
+})
 
 // ============ 页面跳转 ============
 

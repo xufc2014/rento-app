@@ -290,15 +290,15 @@ class Database {
   }
 
   /**
-   * 删除单个房间（只允许删除空置状态的房间）
+   * 删除单个房间（只允许删除空置或退租中状态的房间）
    * 级联清理该房间关联的数据：账单、抄表记录、退租记录
    */
   deleteRoom(id) {
     const rooms = this.getRooms()
     const room = rooms.find(r => r.id === id)
     if (!room) return { error: '房间不存在' }
-    if (room.status !== '空置') {
-      return { error: `房间 ${room.roomNumber} 当前状态为"${room.status}"，无法删除。只能删除空置中的房间。` }
+    if (room.status !== '空置' && room.status !== '退租中') {
+      return { error: `房间 ${room.roomNumber} 当前状态为"${room.status}"，无法删除。只能删除空置或退租中的房间。` }
     }
 
     // 级联清理关联数据
@@ -310,7 +310,7 @@ class Database {
   }
 
   /**
-   * 批量删除房间（只允许删除空置状态的房间）
+   * 批量删除房间（只允许删除空置或退租中状态的房间）
    * 返回 { success: [...], failed: [{id, roomNumber, reason}] }
    * 级联清理每个房间关联的数据
    */
@@ -326,8 +326,8 @@ class Database {
         failed.push({ id, roomNumber: id, reason: '房间不存在' })
         continue
       }
-      if (room.status !== '空置') {
-        failed.push({ id, roomNumber: room.roomNumber, reason: `状态为"${room.status}"，只能删除空置房间` })
+      if (room.status !== '空置' && room.status !== '退租中') {
+        failed.push({ id, roomNumber: room.roomNumber, reason: `状态为"${room.status}"，只能删除空置或退租中房间` })
         keepIds.add(id)
         continue
       }
@@ -540,7 +540,7 @@ class Database {
     contracts[idx].status = '已续签'
     this.set(KEYS.CONTRACTS, contracts)
 
-    // 创建新合同
+    // 创建新合同（继承旧合同的额外押金）
     const newContract = {
       id: generateId(),
       roomId: oldContract.roomId,
@@ -550,6 +550,8 @@ class Database {
       depositAmount: oldContract.depositAmount,
       depositRule: oldContract.depositRule,
       rentAmount: newContractData.rentAmount || oldContract.rentAmount,
+      extraDeposit: oldContract.extraDeposit || 0,
+      extraDepositNote: oldContract.extraDepositNote || '',
       status: '活跃',
       parentId: contractId,
       createdAt: new Date().toISOString()
@@ -852,9 +854,11 @@ class Database {
     const contract = this.getContractById(room.currentContractId)
     const settings = this.getSettings()
 
-    // 获取最终水电读数
-    const waterFee = calcUtilityFee(data.roomId, 'water', null, this)
-    const electricFee = calcUtilityFee(data.roomId, 'electric', null, this)
+    // 获取最终水电读数（使用用户在退租页面手动输入的读数和已计算好的费用）
+    // 优先使用传入的 waterFee/electricFee（由 checkout 页面基于用户输入读数计算）
+    // 如果没有传入，则从数据库历史读数计算（兜底）
+    const waterFee = data.waterFee != null ? data.waterFee : calcUtilityFee(data.roomId, 'water', null, this)
+    const electricFee = data.electricFee != null ? data.electricFee : calcUtilityFee(data.roomId, 'electric', null, this)
 
     const repairDeduction = data.repairDeduction || 0
     const unpaidRent = data.unpaidRent || 0

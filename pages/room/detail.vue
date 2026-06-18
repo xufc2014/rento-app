@@ -262,7 +262,8 @@ function goMeterReading() {
 }
 
 function goBills() {
-  uni.navigateTo({ url: `/pages/bill/list?roomId=${roomId.value}` })
+  // bill/list 是 TabBar 页面，必须用 switchTab，不支持传参数
+  uni.switchTab({ url: '/pages/bill/list' })
 }
 
 function goContract() {

@@ -128,7 +128,7 @@
 
       <view class="settle-total">
         <text class="settle-total-label">应退金额</text>
-        <text class="settle-total-value" :class="totalReturn >= 0 ? 'amount-red' : 'amount-red'">
+        <text class="settle-total-value" :class="totalReturn >= 0 ? 'amount-green' : 'amount-red'">
           {{ formatAmount(totalReturn) }}
         </text>
       </view>
@@ -304,6 +304,8 @@ function doCheckout() {
     contractId: contractId.value,
     finalWaterReading: Number(finalWaterReading.value) || 0,
     finalElectricReading: Number(finalElectricReading.value) || 0,
+    waterFee: waterFee.value,
+    electricFee: electricFee.value,
     repairDeduction: repairDeductionNum.value,
     repairNotes: repairNotes.value,
     unpaidRent: unpaidRentNum.value

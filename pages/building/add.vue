@@ -336,7 +336,7 @@ onLoad((options) => {
       buildingName.value = building.name
       buildingDesc.value = building.description || ''
       // 直接跳到步骤2（选择生成方式）
-      step.value = 1
+      step.value = 2
     }
   }
 })
