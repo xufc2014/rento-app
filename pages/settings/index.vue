@@ -180,6 +180,18 @@
       </view>
     </view>
 
+    <!-- 调试工具 -->
+    <view class="card">
+      <view class="card-title">调试工具</view>
+
+      <view class="data-actions">
+        <view class="btn-big" style="background:#9C27B0;color:#fff;" @click="seedMeterReadings">
+          生成抄表测试数据（2026年5月）
+        </view>
+      </view>
+      <text class="form-hint">清空现有抄表数据，为每个房间随机生成初始水/电表读数</text>
+    </view>
+
     <!-- 操作日志 -->
     <view class="card">
       <view class="card-title">其他</view>
@@ -479,6 +491,28 @@ function confirmClearAll() {
   loadSettings()
   showClearConfirm.value = false
   uni.showToast({ title: '所有数据已清空', icon: 'success' })
+}
+
+// ============ 调试工具 ============
+
+function seedMeterReadings() {
+  uni.showModal({
+    title: '生成测试数据',
+    content: '将清空现有抄表数据，为每个房间随机生成2026年5月的初始水/电表读数。确定？',
+    success: (res) => {
+      if (res.confirm) {
+        const result = db.seedMeterReadings()
+        if (result.error) {
+          uni.showToast({ title: result.error, icon: 'none' })
+        } else {
+          uni.showToast({
+            title: `已生成${result.roomCount}间×2条记录`,
+            icon: 'success'
+          })
+        }
+      }
+    }
+  })
 }
 
 // ============ 页面跳转 ============

@@ -512,6 +512,70 @@ class Database {
     return this.getMeterReadings()
   }
 
+  /**
+   * 清空抄表数据并生成随机初始读数（调试用）
+   * 每个房间生成一条水表+一条电表记录，日期为2026年5月
+   */
+  seedMeterReadings() {
+    const rooms = this.getRooms()
+    if (rooms.length === 0) return { error: '没有房间数据，请先添加房间' }
+
+    // 清空现有抄表数据
+    this.set(KEYS.METER_READINGS, [])
+    this._cache[KEYS.METER_READINGS] = []
+
+    const readings = []
+    let count = 0
+
+    for (const room of rooms) {
+      // 水表：随机 30~180 吨
+      const waterValue = Math.round((30 + Math.random() * 150) * 10) / 10
+      // 电表：随机 100~800 度
+      const electricValue = Math.round((100 + Math.random() * 700) * 10) / 10
+
+      // 水表记录
+      readings.push({
+        id: generateId(),
+        roomId: room.id,
+        meterType: 'water',
+        readingValue: waterValue,
+        previousValue: 0,
+        consumption: waterValue,
+        isAnomaly: false,
+        anomalyType: null,
+        isAnomalyConfirmed: false,
+        photoPath: null,
+        readingDate: '2026-05-15T10:00:00.000Z',
+        notes: '初始读数',
+        createdAt: '2026-05-15T10:00:00.000Z'
+      })
+
+      // 电表记录
+      readings.push({
+        id: generateId(),
+        roomId: room.id,
+        meterType: 'electric',
+        readingValue: electricValue,
+        previousValue: 0,
+        consumption: electricValue,
+        isAnomaly: false,
+        anomalyType: null,
+        isAnomalyConfirmed: false,
+        photoPath: null,
+        readingDate: '2026-05-15T10:00:00.000Z',
+        notes: '初始读数',
+        createdAt: '2026-05-15T10:00:00.000Z'
+      })
+
+      count++
+    }
+
+    this.set(KEYS.METER_READINGS, readings)
+    this.logOperation('初始化抄表数据', 'meter', 'seed', `为${count}个房间生成了初始水/电表读数（2026年5月）`)
+
+    return { success: true, roomCount: count, readingCount: readings.length }
+  }
+
   getMeterReadingsByRoom(roomId) {
     return this.getMeterReadings().filter(r => r.roomId === roomId)
   }
