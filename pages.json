@@ -1,0 +1,157 @@
+{
+  "pages": [
+    {
+      "path": "pages/index/index",
+      "style": {
+        "navigationBarTitleText": "房东通",
+        "enablePullDownRefresh": true
+      }
+    },
+    {
+      "path": "pages/room/list",
+      "style": {
+        "navigationBarTitleText": "房间管理"
+      }
+    },
+    {
+      "path": "pages/bill/list",
+      "style": {
+        "navigationBarTitleText": "账单管理"
+      }
+    },
+    {
+      "path": "pages/settings/index",
+      "style": {
+        "navigationBarTitleText": "设置"
+      }
+    },
+    {
+      "path": "pages/building/add",
+      "style": {
+        "navigationBarTitleText": "添加楼栋"
+      }
+    },
+    {
+      "path": "pages/room/detail",
+      "style": {
+        "navigationBarTitleText": "房间详情"
+      }
+    },
+    {
+      "path": "pages/room/edit",
+      "style": {
+        "navigationBarTitleText": "编辑房间"
+      }
+    },
+    {
+      "path": "pages/meter/reading",
+      "style": {
+        "navigationBarTitleText": "水电抄表"
+      }
+    },
+    {
+      "path": "pages/meter/history",
+      "style": {
+        "navigationBarTitleText": "抄表记录"
+      }
+    },
+    {
+      "path": "pages/bill/generate",
+      "style": {
+        "navigationBarTitleText": "生成账单"
+      }
+    },
+    {
+      "path": "pages/bill/detail",
+      "style": {
+        "navigationBarTitleText": "账单详情"
+      }
+    },
+    {
+      "path": "pages/contract/list",
+      "style": {
+        "navigationBarTitleText": "合同管理"
+      }
+    },
+    {
+      "path": "pages/contract/add",
+      "style": {
+        "navigationBarTitleText": "签订合同"
+      }
+    },
+    {
+      "path": "pages/contract/detail",
+      "style": {
+        "navigationBarTitleText": "合同详情"
+      }
+    },
+    {
+      "path": "pages/checkout/process",
+      "style": {
+        "navigationBarTitleText": "退租结算"
+      }
+    },
+    {
+      "path": "pages/tenant/list",
+      "style": {
+        "navigationBarTitleText": "租客管理"
+      }
+    },
+    {
+      "path": "pages/tenant/add",
+      "style": {
+        "navigationBarTitleText": "添加租客"
+      }
+    },
+    {
+      "path": "pages/log/list",
+      "style": {
+        "navigationBarTitleText": "操作日志"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "房东通",
+    "navigationBarBackgroundColor": "#FFFFFF",
+    "backgroundColor": "#F5F5F5",
+    "app-plus": {
+      "titleNView": {
+        "titleColor": "#333333",
+        "backgroundColor": "#FFFFFF"
+      }
+    }
+  },
+  "tabBar": {
+    "color": "#7A7E83",
+    "selectedColor": "#007AFF",
+    "borderStyle": "black",
+    "backgroundColor": "#FFFFFF",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "iconPath": "static/tab/home.png",
+        "selectedIconPath": "static/tab/home-active.png",
+        "text": "首页"
+      },
+      {
+        "pagePath": "pages/room/list",
+        "iconPath": "static/tab/room.png",
+        "selectedIconPath": "static/tab/room-active.png",
+        "text": "房间"
+      },
+      {
+        "pagePath": "pages/bill/list",
+        "iconPath": "static/tab/bill.png",
+        "selectedIconPath": "static/tab/bill-active.png",
+        "text": "账单"
+      },
+      {
+        "pagePath": "pages/settings/index",
+        "iconPath": "static/tab/settings.png",
+        "selectedIconPath": "static/tab/settings-active.png",
+        "text": "设置"
+      }
+    ]
+  }
+}

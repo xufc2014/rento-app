@@ -1,0 +1,623 @@
+<template>
+  <view class="page">
+    <!-- 楼栋切换 tab -->
+    <scroll-view class="building-tabs" scroll-x v-if="buildings.length > 0">
+      <view
+        class="tab-item"
+        v-for="item in buildings"
+        :key="item.id"
+        :class="{ active: activeBuildingId === item.id }"
+        @click="switchBuilding(item.id)"
+      >
+        <text class="tab-text">{{ item.name }}</text>
+      </view>
+    </scroll-view>
+
+    <!-- 统计 + 编辑按钮 -->
+    <view class="summary-bar" v-if="buildings.length > 0">
+      <text class="summary-text">{{ currentBuildingName }}：共 {{ groupedRooms.length }} 层 / {{ roomCount }} 间房</text>
+      <view
+        class="edit-toggle-btn"
+        :class="{ active: editMode }"
+        @click="toggleEditMode"
+      >
+        <text class="edit-toggle-text">{{ editMode ? '完成' : '批量删除' }}</text>
+      </view>
+    </view>
+
+    <!-- 批量删除提示栏 -->
+    <view class="selection-bar" v-if="editMode">
+      <text class="selection-info">已选 {{ selectedIds.size }} 间（仅空置房间可删）</text>
+      <view class="selection-actions">
+        <view class="sel-btn" @click="selectAll">全选空置</view>
+        <view class="sel-btn sel-btn-clear" @click="clearSelection">取消</view>
+        <view
+          class="sel-btn sel-btn-delete"
+          :class="{ disabled: selectedIds.size === 0 }"
+          @click="confirmDelete"
+        >删除 {{ selectedIds.size > 0 ? selectedIds.size + '间' : '' }}</view>
+      </view>
+    </view>
+
+    <!-- 无楼栋空状态 -->
+    <view class="card empty-card" v-if="buildings.length === 0">
+      <text class="empty-icon">&#10068;</text>
+      <text class="empty-text">还没有楼栋数据</text>
+      <text class="empty-tip">请先添加楼栋，再添加房间</text>
+    </view>
+
+    <!-- 楼层房间列表 -->
+    <view v-if="buildings.length > 0">
+      <view class="floor-section" v-for="group in groupedRooms" :key="group.floor">
+        <view class="floor-header">
+          <text class="floor-title">{{ formatFloor(group.floor) }}</text>
+          <text class="floor-count">{{ group.rooms.length }} 间</text>
+        </view>
+        <view class="room-grid">
+          <view
+            class="room-card"
+            v-for="room in group.rooms"
+            :key="room.id"
+            :class="{
+              'room-selectable': editMode,
+              'room-selected': editMode && selectedIds.has(room.id),
+              'room-disabled': editMode && room.status !== '空置'
+            }"
+            @click="editMode ? toggleSelect(room) : goRoomDetail(room.id)"
+          >
+            <!-- 选中勾选框 -->
+            <view class="select-check" v-if="editMode">
+              <view
+                class="check-circle"
+                :class="{
+                  checked: selectedIds.has(room.id),
+                  'check-disabled': room.status !== '空置'
+                }"
+              >
+                <text v-if="selectedIds.has(room.id)" class="check-icon">✓</text>
+              </view>
+            </view>
+
+            <view class="room-top">
+              <text class="room-number">{{ room.roomNumber }}</text>
+              <text class="tag" :class="statusClass(room.status)">{{ room.status }}</text>
+            </view>
+            <text class="room-type">{{ room.unitType }}</text>
+            <view class="room-info">
+              <text class="room-area">{{ room.area || 0 }} m²</text>
+              <text class="room-rent">{{ formatAmount(room.baseRent || 0) }}</text>
+            </view>
+            <text class="room-tenant" v-if="room.currentTenantId">
+              {{ tenantName(room.currentTenantId) }}
+            </text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 底部占位 -->
+    <view class="bottom-placeholder"></view>
+
+    <!-- 底部添加楼栋按钮（非编辑模式） -->
+    <view class="footer-bar" v-if="!editMode">
+      <view class="btn-big btn-primary" @click="goAddBuilding">添加楼栋</view>
+    </view>
+  </view>
+</template>
+
+<script setup>
+import { ref, computed } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
+import db from '@/utils/db.js'
+import { formatAmount } from '@/utils/calc.js'
+
+// ============ 状态 ============
+
+const buildings = ref([])
+const activeBuildingId = ref('')
+const rooms = ref([])
+const editMode = ref(false)
+const selectedIds = ref(new Set())
+
+const statusMap = {
+  '空置': 'tag-gray',
+  '已预订': 'tag-orange',
+  '已入住': 'tag-green',
+  '退租中': 'tag-orange'
+}
+
+// ============ 计算属性 ============
+
+const currentBuildingName = computed(() => {
+  const building = buildings.value.find(b => b.id === activeBuildingId.value)
+  return building ? building.name : ''
+})
+
+const roomCount = computed(() => rooms.value.length)
+
+function floorSortKey(floor) {
+  const n = Number(floor)
+  return isNaN(n) ? 99999 : n
+}
+
+function roomSortKey(roomNumber) {
+  const n = parseInt(roomNumber, 10)
+  return isNaN(n) ? 99999 : n
+}
+
+const groupedRooms = computed(() => {
+  const sorted = [...rooms.value].sort((a, b) => {
+    const floorDiff = floorSortKey(a.floor) - floorSortKey(b.floor)
+    if (floorDiff !== 0) return floorDiff
+    return roomSortKey(a.roomNumber) - roomSortKey(b.roomNumber)
+  })
+
+  const groups = {}
+  for (const room of sorted) {
+    if (!groups[room.floor]) groups[room.floor] = []
+    groups[room.floor].push(room)
+  }
+
+  return Object.keys(groups)
+    .sort((a, b) => floorSortKey(a) - floorSortKey(b))
+    .map(floor => ({ floor, rooms: groups[floor] }))
+})
+
+// ============ 数据加载 ============
+
+function loadData() {
+  buildings.value = db.getBuildings()
+  if (buildings.value.length > 0) {
+    if (!activeBuildingId.value || !buildings.value.find(b => b.id === activeBuildingId.value)) {
+      activeBuildingId.value = buildings.value[0].id
+    }
+    rooms.value = db.getRoomsByBuilding(activeBuildingId.value)
+  } else {
+    activeBuildingId.value = ''
+    rooms.value = []
+  }
+}
+
+onShow(() => {
+  loadData()
+})
+
+// ============ 交互 ============
+
+function switchBuilding(id) {
+  if (editMode.value) {
+    editMode.value = false
+    selectedIds.value = new Set()
+  }
+  activeBuildingId.value = id
+  rooms.value = db.getRoomsByBuilding(id)
+}
+
+function goRoomDetail(roomId) {
+  uni.navigateTo({ url: `/pages/room/detail?roomId=${roomId}` })
+}
+
+function goAddBuilding() {
+  uni.navigateTo({ url: '/pages/building/add' })
+}
+
+function formatFloor(floor) {
+  const n = Number(floor)
+  return isNaN(n) ? `${floor}` : `${n}F`
+}
+
+function statusClass(status) {
+  return statusMap[status] || 'tag-gray'
+}
+
+function tenantName(tenantId) {
+  const tenant = db.getTenantById(tenantId)
+  return tenant ? tenant.name : ''
+}
+
+// ============ 批量删除 ============
+
+function toggleEditMode() {
+  editMode.value = !editMode.value
+  if (!editMode.value) {
+    selectedIds.value = new Set()
+  }
+}
+
+function toggleSelect(room) {
+  if (room.status !== '空置') {
+    uni.showToast({ title: `${room.roomNumber} 非空置，不可删除`, icon: 'none' })
+    return
+  }
+  const newSet = new Set(selectedIds.value)
+  if (newSet.has(room.id)) {
+    newSet.delete(room.id)
+  } else {
+    newSet.add(room.id)
+  }
+  selectedIds.value = newSet
+}
+
+function selectAll() {
+  const vacantIds = rooms.value
+    .filter(r => r.status === '空置')
+    .map(r => r.id)
+  selectedIds.value = new Set(vacantIds)
+}
+
+function clearSelection() {
+  selectedIds.value = new Set()
+}
+
+function confirmDelete() {
+  if (selectedIds.value.size === 0) {
+    uni.showToast({ title: '请先选择要删除的房间', icon: 'none' })
+    return
+  }
+
+  uni.showModal({
+    title: '确认删除',
+    content: `确定要删除已选的 ${selectedIds.value.size} 间空置房间吗？删除后无法恢复！`,
+    confirmColor: '#FF3B30',
+    confirmText: '确认删除',
+    cancelText: '取消',
+    success(res) {
+      if (res.confirm) {
+        doDelete()
+      }
+    }
+  })
+}
+
+function doDelete() {
+  const ids = Array.from(selectedIds.value)
+  const result = db.deleteRooms(ids)
+
+  let msg = `成功删除 ${result.success.length} 间`
+  if (result.failed.length > 0) {
+    msg += `，${result.failed.length} 间删除失败`
+  }
+
+  uni.showToast({ title: msg, icon: result.failed.length === 0 ? 'success' : 'none' })
+
+  if (result.failed.length > 0) {
+    const failNames = result.failed.map(f => `${f.roomNumber}(${f.reason})`).join('\n')
+    setTimeout(() => {
+      uni.showModal({
+        title: '部分删除失败',
+        content: failNames,
+        showCancel: false
+      })
+    }, 1200)
+  }
+
+  editMode.value = false
+  selectedIds.value = new Set()
+  loadData()
+}
+</script>
+
+<style scoped>
+.page {
+  min-height: 100vh;
+  padding-top: 8px;
+  padding-bottom: 100px;
+  background-color: #f5f5f5;
+}
+
+.building-tabs {
+  white-space: nowrap;
+  background-color: #ffffff;
+  padding: 0 8px;
+  border-bottom: 1px solid #eeeeee;
+}
+
+.tab-item {
+  display: inline-block;
+  padding: 14px 16px;
+  border-bottom: 3px solid transparent;
+}
+
+.tab-text {
+  font-size: 16px;
+  color: #999999;
+}
+
+.tab-item.active {
+  border-bottom-color: #007AFF;
+}
+
+.tab-item.active .tab-text {
+  color: #333333;
+  font-weight: 700;
+}
+
+.summary-bar {
+  padding: 10px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.summary-text {
+  font-size: 14px;
+  color: #666666;
+}
+
+.edit-toggle-btn {
+  padding: 6px 14px;
+  border-radius: 20px;
+  background-color: #f0f0f0;
+  border: 1px solid #ddd;
+}
+
+.edit-toggle-btn.active {
+  background-color: #007AFF;
+  border-color: #007AFF;
+}
+
+.edit-toggle-text {
+  font-size: 14px;
+  color: #555;
+}
+
+.edit-toggle-btn.active .edit-toggle-text {
+  color: #fff;
+  font-weight: 600;
+}
+
+/* 选择操作栏 */
+.selection-bar {
+  background-color: #fff8e7;
+  border-bottom: 1px solid #ffd060;
+  padding: 10px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.selection-info {
+  font-size: 14px;
+  color: #333;
+  font-weight: 600;
+}
+
+.selection-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.sel-btn {
+  padding: 6px 12px;
+  border-radius: 16px;
+  background-color: #eeeeee;
+  font-size: 13px;
+  color: #333;
+}
+
+.sel-btn-clear {
+  background-color: #f0f0f0;
+  color: #666;
+}
+
+.sel-btn-delete {
+  background-color: #FF3B30;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.sel-btn-delete.disabled {
+  background-color: #ffb3ae;
+  color: #fff;
+}
+
+/* 空状态 */
+.empty-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 16px;
+  margin-top: 20px;
+  background-color: #ffffff;
+  border-radius: 12px;
+  margin: 20px 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.empty-icon {
+  font-size: 48px;
+  color: #007AFF;
+  margin-bottom: 12px;
+}
+
+.empty-text {
+  font-size: 18px;
+  font-weight: 700;
+  color: #333333;
+  margin-bottom: 6px;
+}
+
+.empty-tip {
+  font-size: 14px;
+  color: #999999;
+}
+
+/* 楼层 */
+.floor-section {
+  margin-bottom: 16px;
+}
+
+.floor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+}
+
+.floor-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #333333;
+}
+
+.floor-count {
+  font-size: 14px;
+  color: #999999;
+}
+
+/* 房间格 */
+.room-grid {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 0 10px;
+}
+
+.room-card {
+  width: calc(50% - 12px);
+  margin: 6px;
+  background-color: #ffffff;
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  position: relative;
+  transition: all 0.15s;
+}
+
+.room-selectable {
+  border: 2px solid transparent;
+}
+
+.room-selected {
+  border: 2px solid #007AFF;
+  background-color: #e8f4ff;
+}
+
+.room-disabled {
+  opacity: 0.5;
+}
+
+/* 选择圆圈 */
+.select-check {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+}
+
+.check-circle {
+  width: 22px;
+  height: 22px;
+  border-radius: 11px;
+  border: 2px solid #007AFF;
+  background-color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.check-circle.checked {
+  background-color: #007AFF;
+  border-color: #007AFF;
+}
+
+.check-circle.check-disabled {
+  border-color: #cccccc;
+  background-color: #f5f5f5;
+}
+
+.check-icon {
+  font-size: 13px;
+  color: #ffffff;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.room-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.room-number {
+  font-size: 22px;
+  font-weight: 800;
+  color: #333333;
+}
+
+.room-type {
+  font-size: 14px;
+  color: #666666;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.room-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.room-area {
+  font-size: 13px;
+  color: #999999;
+}
+
+.room-rent {
+  font-size: 16px;
+  font-weight: 700;
+  color: #007AFF;
+}
+
+.room-tenant {
+  font-size: 13px;
+  color: #34C759;
+  margin-top: 6px;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 状态标签 */
+.tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+.tag-gray { background-color: #f0f0f0; color: #999999; }
+.tag-green { background-color: #e6f9ee; color: #34C759; }
+.tag-orange { background-color: #fff3e6; color: #FF9500; }
+.tag-red { background-color: #fff0f0; color: #FF3B30; }
+
+.bottom-placeholder {
+  height: 80px;
+}
+
+.footer-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 12px 16px 24px;
+  background-color: #ffffff;
+  border-top: 1px solid #eeeeee;
+  z-index: 100;
+}
+
+.footer-bar .btn-big {
+  width: 100%;
+}
+
+.btn-big {
+  height: 48px;
+  line-height: 48px;
+  font-size: 18px;
+  font-weight: 600;
+  border-radius: 8px;
+  text-align: center;
+  border: none;
+}
+
+.btn-primary {
+  background-color: #007AFF;
+  color: #ffffff;
+}
+</style>
