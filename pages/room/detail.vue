@@ -112,21 +112,21 @@
         <text class="info-label">电话</text>
         <text class="info-value">{{ tenant.phone || '-' }}</text>
       </view>
-      <view class="info-row" v-if="contract">
+      <view class="info-row clickable" v-if="contract" @click="goContractDetail">
         <text class="info-label">合同到期</text>
-        <text class="info-value">{{ formatDateCN(contract.endDate) }}（{{ getRelativeDaysDesc(contract.endDate) }}）</text>
+        <text class="info-value link-value">{{ formatDateCN(contract.endDate) }}（{{ getRelativeDaysDesc(contract.endDate) }}）›</text>
       </view>
-      <view class="info-row" v-if="contract">
+      <view class="info-row clickable" v-if="contract" @click="goContractDetail">
         <text class="info-label">押金</text>
-        <text class="info-value">{{ formatAmount(contract.depositAmount) }}</text>
+        <text class="info-value link-value">{{ formatAmount(contract.depositAmount) }} ›</text>
       </view>
-      <view class="info-row" v-if="contract && contract.extraDeposit > 0">
+      <view class="info-row clickable" v-if="contract && contract.extraDeposit > 0" @click="goContractDetail">
         <text class="info-label">额外押金</text>
-        <text class="info-value amount-red">{{ formatAmount(contract.extraDeposit) }}</text>
+        <text class="info-value link-value amount-red">{{ formatAmount(contract.extraDeposit) }} ›</text>
       </view>
-      <view class="info-row" v-if="contract && contract.extraDeposit > 0">
+      <view class="info-row clickable" v-if="contract && contract.extraDeposit > 0" @click="goContractDetail">
         <text class="info-label">总押金</text>
-        <text class="info-value amount-red">{{ formatAmount(contract.depositAmount + contract.extraDeposit) }}</text>
+        <text class="info-value link-value amount-red">{{ formatAmount(contract.depositAmount + contract.extraDeposit) }} ›</text>
       </view>
     </view>
 
@@ -275,6 +275,12 @@ function goCheckout() {
 
 function goEdit() {
   uni.navigateTo({ url: `/pages/room/edit?roomId=${roomId.value}` })
+}
+
+function goContractDetail() {
+  if (contract.value) {
+    uni.navigateTo({ url: `/pages/contract/detail?id=${contract.value.id}` })
+  }
 }
 
 function markVacant() {
@@ -517,5 +523,13 @@ function deleteRoom() {
 
 .amount-red {
   color: #FF3B30;
+}
+
+.info-row.clickable {
+  cursor: pointer;
+}
+
+.link-value {
+  color: #007AFF;
 }
 </style>

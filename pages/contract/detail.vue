@@ -13,31 +13,97 @@
             <text class="info-label">租客</text>
             <text class="info-value">{{ tenantName }}</text>
           </view>
-          <view class="info-item">
-            <text class="info-label">开始日期</text>
-            <text class="info-value">{{ formatDateCN(contract.startDate) }}</text>
-          </view>
-          <view class="info-item">
-            <text class="info-label">结束日期</text>
-            <text class="info-value">{{ formatDateCN(contract.endDate) }}</text>
-          </view>
-          <view class="info-item">
-            <text class="info-label">月租金</text>
-            <text class="info-value amount-red">{{ formatAmount(contract.rentAmount) }}</text>
-          </view>
-          <view class="info-item">
-            <text class="info-label">押金</text>
-            <text class="info-value">{{ formatAmount(contract.depositAmount) }}</text>
-          </view>
-          <view class="info-item">
-            <text class="info-label">押金规则</text>
-            <text class="info-value">{{ contract.depositRule }}</text>
-          </view>
+
+          <!-- 查看模式 -->
+          <template v-if="!isEditing">
+            <view class="info-item">
+              <text class="info-label">开始日期</text>
+              <text class="info-value">{{ formatDateCN(contract.startDate) }}</text>
+            </view>
+            <view class="info-item">
+              <text class="info-label">结束日期</text>
+              <text class="info-value">{{ formatDateCN(contract.endDate) }}</text>
+            </view>
+            <view class="info-item">
+              <text class="info-label">月租金</text>
+              <text class="info-value amount-red">{{ formatAmount(contract.rentAmount) }}</text>
+            </view>
+            <view class="info-item">
+              <text class="info-label">押金</text>
+              <text class="info-value">{{ formatAmount(contract.depositAmount) }}</text>
+            </view>
+            <view class="info-item">
+              <text class="info-label">押金规则</text>
+              <text class="info-value">{{ contract.depositRule }}</text>
+            </view>
+            <view class="info-item" v-if="contract.extraDeposit > 0">
+              <text class="info-label">额外押金</text>
+              <text class="info-value amount-red">{{ formatAmount(contract.extraDeposit) }}</text>
+            </view>
+            <view class="info-item" v-if="contract.extraDeposit > 0">
+              <text class="info-label">额外押金说明</text>
+              <text class="info-value">{{ contract.extraDepositNote || '-' }}</text>
+            </view>
+            <view class="info-item" v-if="contract.extraDeposit > 0">
+              <text class="info-label">总押金</text>
+              <text class="info-value amount-red">{{ formatAmount(contract.depositAmount + contract.extraDeposit) }}</text>
+            </view>
+          </template>
+
+          <!-- 编辑模式 -->
+          <template v-else>
+            <view class="edit-field">
+              <text class="edit-label">开始日期</text>
+              <picker mode="date" :value="editForm.startDate" @change="e => editForm.startDate = e.detail.value">
+                <text class="edit-date-value">{{ editForm.startDate || '请选择' }}</text>
+              </picker>
+            </view>
+            <view class="edit-field">
+              <text class="edit-label">结束日期</text>
+              <picker mode="date" :value="editForm.endDate" @change="e => editForm.endDate = e.detail.value">
+                <text class="edit-date-value">{{ editForm.endDate || '请选择' }}</text>
+              </picker>
+            </view>
+            <view class="edit-field">
+              <text class="edit-label">月租金</text>
+              <input class="edit-input" type="digit" v-model="editForm.rentAmount" placeholder="月租金" />
+            </view>
+            <view class="edit-field">
+              <text class="edit-label">押金规则</text>
+              <view class="rule-list">
+                <view
+                  class="rule-item"
+                  v-for="rule in depositRules"
+                  :key="rule"
+                  :class="{ active: editForm.depositRule === rule }"
+                  @click="editForm.depositRule = rule"
+                >
+                  <text class="rule-text">{{ rule }}</text>
+                </view>
+              </view>
+            </view>
+            <view class="edit-field">
+              <text class="edit-label">基础押金（自动计算）</text>
+              <text class="deposit-display">{{ formatAmount(calcEditBaseDeposit) }}</text>
+            </view>
+            <view class="edit-field">
+              <text class="edit-label">额外押金</text>
+              <input class="edit-input" type="digit" v-model="editForm.extraDeposit" placeholder="0" />
+            </view>
+            <view class="edit-field">
+              <text class="edit-label">额外押金说明</text>
+              <input class="edit-input" v-model="editForm.extraDepositNote" placeholder="选填" />
+            </view>
+            <view class="edit-field">
+              <text class="edit-label">总押金</text>
+              <text class="deposit-display deposit-total">{{ formatAmount(calcEditTotalDeposit) }}</text>
+            </view>
+          </template>
         </view>
       </view>
 
       <!-- 到期倒计时 -->
-      <view class="card" v-if="contract.status === '活跃'">
+      <view class="card" v-if="contract.status === '活跃' && !isEditing">
         <view class="countdown">
           <text class="countdown-label">到期倒计时</text>
           <text class="countdown-days" :class="expireClass">{{ expireDays }}</text>
@@ -48,10 +114,17 @@
       <!-- 底部占位 -->
       <view class="bottom-placeholder"></view>
 
-      <!-- 操作按钮 -->
-      <view class="footer-bar" v-if="contract.status === '活跃'">
+      <!-- 操作按钮 - 查看模式 -->
+      <view class="footer-bar" v-if="contract.status === '活跃' && !isEditing">
+        <view class="btn-big btn-primary" @click="startEdit">编辑合同</view>
         <view class="btn-big btn-warning" @click="showRenewPanel = true">续签合同</view>
         <view class="btn-big btn-danger" @click="goCheckout">退租结算</view>
+      </view>
+
+      <!-- 操作按钮 - 编辑模式 -->
+      <view class="footer-bar" v-if="isEditing">
+        <view class="btn-big btn-success" @click="saveEdit">保存修改</view>
+        <view class="btn-big btn-secondary" @click="cancelEdit">取消</view>
       </view>
     </view>
 
@@ -87,8 +160,8 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { ref, computed, reactive } from 'vue'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import db from '@/utils/db.js'
 import { formatDateCN, daysFromNow, getRelativeDaysDesc } from '@/utils/date.js'
 import { formatAmount } from '@/utils/calc.js'
@@ -98,11 +171,37 @@ const contract = ref(null)
 const roomLabel = ref('')
 const tenantName = ref('')
 
+// 编辑模式
+const isEditing = ref(false)
+const editForm = reactive({
+  startDate: '',
+  endDate: '',
+  rentAmount: '',
+  depositRule: '',
+  extraDeposit: '',
+  extraDepositNote: ''
+})
+
+const depositRules = ['押一付一', '押二付一', '押一付三']
+
 // 续签面板
 const showRenewPanel = ref(false)
 const renewStartDate = ref('')
 const renewEndDate = ref('')
 const renewRentAmount = ref('')
+
+// 编辑模式押金计算
+const calcEditBaseDeposit = computed(() => {
+  const rent = Number(editForm.rentAmount) || 0
+  if (editForm.depositRule === '押一付一') return rent * 1
+  if (editForm.depositRule === '押二付一') return rent * 2
+  if (editForm.depositRule === '押一付三') return rent * 1
+  return rent
+})
+
+const calcEditTotalDeposit = computed(() => {
+  return calcEditBaseDeposit.value + (Number(editForm.extraDeposit) || 0)
+})
 
 // 到期信息
 const expireDays = computed(() => {
@@ -137,6 +236,12 @@ onLoad((options) => {
   }
 })
 
+onShow(() => {
+  if (contractId.value) {
+    loadContract()
+  }
+})
+
 function loadContract() {
   const c = db.getContractById(contractId.value)
   if (!c) {
@@ -155,6 +260,51 @@ function loadContract() {
   // 初始化续签数据
   renewStartDate.value = c.endDate
   renewRentAmount.value = String(c.rentAmount)
+}
+
+function startEdit() {
+  const c = contract.value
+  editForm.startDate = c.startDate
+  editForm.endDate = c.endDate
+  editForm.rentAmount = String(c.rentAmount)
+  editForm.depositRule = c.depositRule
+  editForm.extraDeposit = c.extraDeposit ? String(c.extraDeposit) : ''
+  editForm.extraDepositNote = c.extraDepositNote || ''
+  isEditing.value = true
+}
+
+function cancelEdit() {
+  isEditing.value = false
+}
+
+function saveEdit() {
+  if (!editForm.startDate || !editForm.endDate) {
+    uni.showToast({ title: '请选择日期', icon: 'none' })
+    return
+  }
+  if (new Date(editForm.endDate) <= new Date(editForm.startDate)) {
+    uni.showToast({ title: '结束日期必须晚于开始日期', icon: 'none' })
+    return
+  }
+
+  const result = db.updateContract(contractId.value, {
+    startDate: editForm.startDate,
+    endDate: editForm.endDate,
+    rentAmount: Number(editForm.rentAmount) || 0,
+    depositAmount: calcEditBaseDeposit.value,
+    depositRule: editForm.depositRule,
+    extraDeposit: Number(editForm.extraDeposit) || 0,
+    extraDepositNote: editForm.extraDepositNote
+  })
+
+  if (result.error) {
+    uni.showToast({ title: result.error, icon: 'none' })
+    return
+  }
+
+  isEditing.value = false
+  loadContract()
+  uni.showToast({ title: '合同已修改', icon: 'success' })
 }
 
 function setRenewQuick(months) {
@@ -247,6 +397,10 @@ function goCheckout() {
   display: block;
 }
 
+.amount-red {
+  color: #FF3B30;
+}
+
 .countdown {
   display: flex;
   flex-direction: column;
@@ -282,6 +436,85 @@ function goCheckout() {
   font-size: 14px;
   color: #999999;
   margin-top: 4px;
+}
+
+/* 编辑模式样式 */
+.edit-field {
+  width: 100%;
+  padding: 10px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.edit-field:last-child {
+  border-bottom: none;
+}
+
+.edit-label {
+  font-size: 14px;
+  color: #666666;
+  margin-bottom: 6px;
+  display: block;
+}
+
+.edit-input {
+  height: 44px;
+  font-size: 17px;
+  border: 1px solid #dddddd;
+  border-radius: 8px;
+  padding: 0 12px;
+  background-color: #ffffff;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.edit-date-value {
+  font-size: 17px;
+  font-weight: 700;
+  color: #007AFF;
+  padding: 10px 0;
+  display: block;
+}
+
+.rule-list {
+  display: flex;
+  gap: 10px;
+}
+
+.rule-item {
+  flex: 1;
+  height: 40px;
+  line-height: 40px;
+  text-align: center;
+  background-color: #f5f5f5;
+  border-radius: 8px;
+  border: 2px solid transparent;
+}
+
+.rule-item.active {
+  border-color: #007AFF;
+  background-color: #E3F2FD;
+}
+
+.rule-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333333;
+}
+
+.rule-item.active .rule-text {
+  color: #007AFF;
+}
+
+.deposit-display {
+  font-size: 22px;
+  font-weight: 800;
+  color: #FF3B30;
+  display: block;
+  padding: 4px 0;
+}
+
+.deposit-total {
+  color: #FF3B30;
 }
 
 .form-label {
@@ -339,11 +572,16 @@ function goCheckout() {
   border-top: 1px solid #eeeeee;
   z-index: 100;
   display: flex;
-  gap: 12px;
+  gap: 10px;
 }
 
 .footer-bar .btn-big {
   flex: 1;
+}
+
+.btn-secondary {
+  background-color: #e0e0e0;
+  color: #666666;
 }
 
 /* 弹窗样式 */
@@ -372,10 +610,5 @@ function goCheckout() {
   color: #333333;
   margin-bottom: 16px;
   text-align: center;
-}
-
-.btn-secondary {
-  background-color: #e0e0e0;
-  color: #666666;
 }
 </style>

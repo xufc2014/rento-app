@@ -97,6 +97,7 @@
         <view class="btn-big btn-primary" @click="goMeterReading">水电抄表</view>
         <view class="btn-big btn-primary" @click="goGenerateBill">生成账单</view>
         <view class="btn-big btn-primary" @click="goAddContract">签订合同</view>
+        <view class="btn-big btn-secondary" @click="goContractList">合同管理</view>
       </view>
     </view>
 
@@ -260,6 +261,12 @@ function goGenerateBill() {
 function goAddContract() {
   uni.navigateTo({
     url: '/pages/contract/add'
+  })
+}
+
+function goContractList() {
+  uni.navigateTo({
+    url: '/pages/contract/list'
   })
 }
 </script>

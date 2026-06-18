@@ -45,6 +45,12 @@
     <view class="card empty-card" v-if="filteredContracts.length === 0">
       <text class="empty-icon">&#128196;</text>
       <text class="empty-text">暂无{{ tabs.find(t => t.key === activeTab)?.label }}合同</text>
+      <view class="btn-big btn-primary" style="margin-top: 16px;" v-if="activeTab === 'active'" @click="goAddContract">签订新合同</view>
+    </view>
+
+    <!-- 底部按钮 -->
+    <view class="card" v-if="activeTab === 'active' && filteredContracts.length > 0" style="margin-top: 12px;">
+      <view class="btn-big btn-primary" @click="goAddContract">签订新合同</view>
     </view>
   </view>
 </template>
@@ -119,6 +125,10 @@ onShow(() => {
 
 function goDetail(contractId) {
   uni.navigateTo({ url: `/pages/contract/detail?id=${contractId}` })
+}
+
+function goAddContract() {
+  uni.navigateTo({ url: '/pages/contract/add' })
 }
 </script>
 

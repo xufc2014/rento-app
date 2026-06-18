@@ -408,6 +408,34 @@ class Database {
   }
 
   /**
+   * 更新合同信息
+   */
+  updateContract(contractId, updates) {
+    const contracts = this.getContracts()
+    const idx = contracts.findIndex(c => c.id === contractId)
+    if (idx === -1) return { error: '合同不存在' }
+
+    // 只允许修改的字段
+    const allowedFields = ['startDate', 'endDate', 'rentAmount', 'depositAmount', 'depositRule', 'extraDeposit', 'extraDepositNote']
+    for (const key of allowedFields) {
+      if (updates[key] !== undefined) {
+        contracts[idx][key] = updates[key]
+      }
+    }
+    contracts[idx].updatedAt = new Date().toISOString()
+    this.set(KEYS.CONTRACTS, contracts)
+
+    // 如果修改了租金，同步更新房间的baseRent
+    if (updates.rentAmount !== undefined) {
+      this.updateRoom(contracts[idx].roomId, { baseRent: updates.rentAmount })
+    }
+
+    this.logOperation('修改合同', 'contract', contractId,
+      `修改了合同信息`)
+    return contracts[idx]
+  }
+
+  /**
    * 签订合同
    */
   addContract(contract) {
