@@ -218,8 +218,6 @@ const renewDepositRule = ref('')
 const renewExtraDeposit = ref('')
 const renewExtraDepositNote = ref('')
 
-const depositRules = ['押一付一', '押二付一', '押一付三']
-
 // 续签押金计算
 const calcRenewBaseDeposit = computed(() => {
   const rent = Number(renewRentAmount.value) || 0
