@@ -60,14 +60,83 @@
       <input class="input-big" v-model="deductionReason" placeholder="减免原因（选填）" style="margin-top: 10px;" />
     </view>
 
-    <!-- 生成结果摘要 -->
+    <!-- 生成结果 - 费用明细 -->
     <view class="card result-card" v-if="generateResult.length > 0">
-      <view class="form-label">生成结果</view>
-      <view class="result-item" v-for="(r, idx) in generateResult" :key="idx">
-        <text class="result-room" v-if="r.roomLabel">{{ r.roomLabel }}</text>
-        <text :class="r.error ? 'result-error' : 'result-success'">
-          {{ r.error || `¥${r.totalAmount.toFixed(2)}` }}
-        </text>
+      <view class="result-header">
+        <view class="form-label">生成结果</view>
+        <text class="result-summary">{{ generateResult.filter(r => !r.error).length }} 笔成功 · {{ selectedMonth }}</text>
+      </view>
+
+      <!-- 每个房间的费用卡片 -->
+      <view
+        class="bill-card"
+        v-for="(r, idx) in generateResult"
+        :key="idx"
+        @click="goDetail(r)"
+      >
+        <!-- 错误提示 -->
+        <view class="bill-error" v-if="r.error">
+          <text class="error-room">{{ r.roomLabel || '未知房间' }}</text>
+          <text class="error-msg">{{ r.error }}</text>
+        </view>
+
+        <!-- 正常费用明细 -->
+        <view v-else>
+          <view class="bill-card-head">
+            <text class="bill-room-name">{{ r.roomLabel || '未知房间' }}</text>
+            <text class="bill-total">¥{{ formatAmt(r.totalAmount) }}</text>
+          </view>
+
+          <view class="bill-fees-grid">
+            <view class="fee-item">
+              <text class="fee-label">房租</text>
+              <text class="fee-val">{{ formatAmt(r.rentAmount) }}</text>
+            </view>
+            <view class="fee-item">
+              <text class="fee-label">水费</text>
+              <text class="fee-val" :class="{ 'fee-zero': r.waterFee === 0 }">{{ formatAmt(r.waterFee) }}</text>
+            </view>
+            <view class="fee-item">
+              <text class="fee-label">电费</text>
+              <text class="fee-val" :class="{ 'fee-zero': r.electricFee === 0 }">{{ formatAmt(r.electricFee) }}</text>
+            </view>
+            <view class="fee-item" v-if="r.gasFee > 0">
+              <text class="fee-label">气费</text>
+              <text class="fee-val">{{ formatAmt(r.gasFee) }}</text>
+            </view>
+            <view class="fee-item">
+              <text class="fee-label">网费</text>
+              <text class="fee-val" :class="{ 'fee-zero': r.internetFee === 0 }">{{ formatAmt(r.internetFee) }}</text>
+            </view>
+            <view class="fee-item" v-if="r.sanitationFee > 0">
+              <text class="fee-label">卫生费</text>
+              <text class="fee-val">{{ formatAmt(r.sanitationFee) }}</text>
+            </view>
+            <view class="fee-item" v-if="r.managementFee > 0">
+              <text class="fee-label">管理费</text>
+              <text class="fee-val">{{ formatAmt(r.managementFee) }}</text>
+            </view>
+            <view class="fee-item" v-if="r.otherFee > 0">
+              <text class="fee-label">其他</text>
+              <text class="fee-val">{{ formatAmt(r.otherFee) }}</text>
+            </view>
+            <view class="fee-item fee-deduction" v-if="r.deduction > 0">
+              <text class="fee-label">减免</text>
+              <text class="fee-val fee-green">-{{ formatAmt(r.deduction) }}</text>
+            </view>
+          </view>
+
+          <view class="bill-card-footer">
+            <text class="bill-hint">点击查看详情 →</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 导出按钮 -->
+      <view class="export-section" v-if="generateResult.some(r => !r.error)">
+        <view class="btn-big btn-export" @click="doExport">
+          📊 导出 Excel（{{ generateResult.filter(r => !r.error).length }}笔）
+        </view>
       </view>
     </view>
 
@@ -88,6 +157,7 @@ import { ref, computed } from 'vue'
 import db from '@/utils/db.js'
 import { getNextMonth } from '@/utils/date.js'
 import { formatAmount } from '@/utils/calc.js'
+import { exportBillsToExcel } from '@/utils/export.js'
 
 const buildings = ref([])
 const selectedBuildingId = ref('')
@@ -173,11 +243,16 @@ function doGenerate() {
   const rooms = db.getRooms()
   const results = db.batchGenerateBills(roomIds, selectedMonth.value, options)
 
+  // 构建含完整费用明细的结果
   generateResult.value = results.map((r, i) => {
     const room = rooms.find(rm => rm.id === roomIds[i]) || {}
     return {
       ...r,
-      roomLabel: `${room.floor || ''}-${room.roomNumber || ''}`
+      roomId: r.roomId || roomIds[i],
+      billId: r.id || '',
+      roomLabel: `${room.floor || ''}-${room.roomNumber || ''}`,
+      tenantName: getTenantNameForRoom(room.currentTenantId),
+      buildingName: getBuildingName(room.buildingId)
     }
   })
 
@@ -190,6 +265,49 @@ function doGenerate() {
   if (failCount > 0) {
     uni.showToast({ title: `${failCount}笔生成失败`, icon: 'none' })
   }
+}
+
+// 格式化金额（安全处理）
+function formatAmt(val) {
+  const n = Number(val) || 0
+  return n.toFixed(2)
+}
+
+// 获取租客名称
+function getTenantNameForRoom(tenantId) {
+  if (!tenantId) return ''
+  const t = db.getTenantById(tenantId)
+  return t ? t.name : ''
+}
+
+// 获取楼栋名称
+function getBuildingName(buildingId) {
+  if (!buildingId) return ''
+  const b = db.getBuildings().find(bd => bd.id === buildingId)
+  return b ? b.name : ''
+}
+
+// 点击跳转账单详情
+function goDetail(result) {
+  if (!result.billId || result.error) return
+  uni.navigateTo({
+    url: `/pages/bill/detail?id=${result.billId}`
+  })
+}
+
+// 导出Excel
+function doExport() {
+  const successResults = generateResult.value.filter(r => !r.error)
+  if (successResults.length === 0) {
+    uni.showToast({ title: '没有可导出的账单', icon: 'none' })
+    return
+  }
+
+  const buildingName = selectedBuildingId.value
+    ? (db.getBuildings().find(b => b.id === selectedBuildingId.value)?.name || '')
+    : ''
+
+  exportBillsToExcel(successResults, selectedMonth.value, buildingName, db)
 }
 
 // 初始化
@@ -352,33 +470,128 @@ if (buildings.value.length > 0) {
   border-left: 4px solid #34C759;
 }
 
-.result-item {
+.result-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 0;
-  border-bottom: 1px solid #f0f0f0;
+  margin-bottom: 12px;
 }
 
-.result-item:last-child {
-  border-bottom: none;
+.result-summary {
+  font-size: 13px;
+  color: #999999;
 }
 
-.result-room {
-  font-size: 15px;
+/* ===== 费用明细卡片 ===== */
+.bill-card {
+  background-color: #fafafa;
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 12px;
+  border: 1px solid #e8e8e8;
+  transition: background-color 0.15s;
+}
+.bill-card:active {
+  background-color: #f0f0f0;
+}
+
+.bill-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.bill-room-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #333333;
+}
+
+.bill-total {
+  font-size: 18px;
+  font-weight: 800;
+  color: #FF3B30;
+}
+
+.bill-fees-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.fee-item {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 100px;
+  padding: 3px 0;
+}
+
+.fee-label {
+  font-size: 13px;
+  color: #888888;
+}
+
+.fee-val {
+  font-size: 14px;
   font-weight: 600;
   color: #333333;
 }
 
-.result-success {
-  font-size: 15px;
-  font-weight: 700;
+.fee-zero {
+  color: #cccccc !important;
+}
+
+.fee-green {
+  color: #34C759 !important;
+}
+
+.fee-deduction .fee-label {
   color: #34C759;
 }
 
-.result-error {
-  font-size: 14px;
+.bill-card-footer {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #e0e0e0;
+  text-align: right;
+}
+
+.bill-hint {
+  font-size: 12px;
+  color: #999999;
+}
+
+/* 错误卡片 */
+.bill-error {
+  padding: 4px 0;
+}
+
+.error-room {
+  font-size: 15px;
+  font-weight: 600;
+  color: #666666;
+}
+
+.error-msg {
+  font-size: 13px;
   color: #FF3B30;
+  margin-left: 8px;
+}
+
+/* ===== 导出区域 ===== */
+.export-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 2px dashed #e0e0e0;
+}
+
+.btn-export {
+  background-color: #ffffff;
+  color: #007AFF;
+  border: 2px solid #007AFF;
+  font-weight: 700;
 }
 
 .bottom-placeholder {
