@@ -738,7 +738,12 @@ class Database {
    * 清空抄表数据并生成随机初始读数（调试用）
    * 每个房间生成一条水表+一条电表记录，日期为2026年5月
    */
-  seedMeterReadings() {
+  seedMeterReadings(month) {
+    // month 格式: "2026-04" 或 "2026-05"
+    const targetMonth = month || '2026-05'  // 兜底用5月
+    const [year, mon] = targetMonth.split('-').map(Number)
+    const dateStr = `${year}-${String(mon).padStart(2, '0')}-15T10:00:00.000Z`
+
     const rooms = this.getRooms()
     if (rooms.length === 0) return { error: '没有房间数据，请先添加房间' }
 
@@ -767,9 +772,9 @@ class Database {
         anomalyType: null,
         isAnomalyConfirmed: false,
         photoPath: null,
-        readingDate: '2026-05-15T10:00:00.000Z',
+        readingDate: dateStr,
         notes: '初始读数',
-        createdAt: '2026-05-15T10:00:00.000Z'
+        createdAt: dateStr
       })
 
       // 电表记录
@@ -784,16 +789,17 @@ class Database {
         anomalyType: null,
         isAnomalyConfirmed: false,
         photoPath: null,
-        readingDate: '2026-05-15T10:00:00.000Z',
+        readingDate: dateStr,
         notes: '初始读数',
-        createdAt: '2026-05-15T10:00:00.000Z'
+        createdAt: dateStr
       })
 
       count++
     }
 
     this.set(KEYS.METER_READINGS, readings)
-    this.logOperation('初始化抄表数据', 'meter', 'seed', `为${count}个房间生成了初始水/电表读数（2026年5月）`)
+    const monthCN = `${year}年${mon}月`
+    this.logOperation('初始化抄表数据', 'meter', 'seed', `为${count}个房间生成了初始水/电表读数（${monthCN}）`)
 
     return { success: true, roomCount: count, readingCount: readings.length }
   }
@@ -1145,24 +1151,118 @@ class Database {
 
   /**
    * 导出所有数据为JSON（用于备份）
+   * @returns {object} 包含所有数据的对象
    */
   exportAllData() {
     const data = {}
     for (const [name, key] of Object.entries(KEYS)) {
       data[name] = this.get(key)
     }
+    data._exportMeta = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      app: '房东通'
+    }
     return data
   }
 
   /**
-   * 导入数据（用于恢复）
+   * 获取当前数据摘要（用于导出前展示）
+   * @returns {object} { buildings, rooms, tenants, contracts, readings, bills, checkouts, logs }
+   */
+  getDataSummary() {
+    const buildings = this.getBuildings()
+    const rooms = this.getRooms()
+    const tenants = this.getTenants()
+    const contracts = this.getContracts()
+    const readings = this.getMeterReadings()
+    const bills = this.getBills()
+    const checkouts = this.get(KEYS.CHECKOUT_RECORDS) || []
+    const logs = this.get(KEYS.OPERATION_LOGS) || []
+
+    const occupiedRooms = rooms.filter(r => r.status === '已入住')
+    const activeContracts = contracts.filter(c => c.status === '活跃')
+    const pendingBills = bills.filter(b => b.status === '未支付' || b.status === '逾期')
+    const paidBills = bills.filter(b => b.status === '已支付')
+
+    return {
+      buildings: { count: buildings.length, names: buildings.map(b => b.name) },
+      rooms: { count: rooms.length, occupied: occupiedRooms.length, vacant: rooms.length - occupiedRooms.length },
+      tenants: { count: tenants.length },
+      contracts: { count: contracts.length, active: activeContracts.length },
+      readings: { count: readings.length },
+      bills: { count: bills.length, pending: pendingBills.length, paid: paidBills.length },
+      checkouts: { count: checkouts.length },
+      logs: { count: logs.length }
+    }
+  }
+
+  /**
+   * 校验导入数据的结构
+   * @param {object} data - 待导入的数据
+   * @returns {object} { valid: boolean, error?: string, summary?: object }
+   */
+  validateImportData(data) {
+    if (!data || typeof data !== 'object') {
+      return { valid: false, error: '数据格式错误，不是有效的备份文件' }
+    }
+
+    // 检查是否有元数据标记（房东通备份）
+    if (!data._exportMeta || data._exportMeta.app !== '房东通') {
+      return { valid: false, error: '不是房东通的备份文件，请选择正确的文件' }
+    }
+
+    // 检查必须的集合
+    const requiredKeys = ['BUILDINGS', 'ROOMS', 'TENANTS', 'CONTRACTS', 'METER_READINGS', 'BILLS']
+    const missing = requiredKeys.filter(k => !Array.isArray(data[k]))
+    if (missing.length > 0) {
+      return { valid: false, error: `备份文件数据不完整，缺少: ${missing.join(', ')}` }
+    }
+
+    // 生成导入摘要
+    const summary = {
+      exportedAt: data._exportMeta.exportedAt,
+      buildings: data.BUILDINGS.length,
+      rooms: data.ROOMS.length,
+      tenants: data.TENANTS.length,
+      contracts: data.CONTRACTS.length,
+      readings: data.METER_READINGS.length,
+      bills: data.BILLS.length,
+      checkouts: (data.CHECKOUT_RECORDS || []).length,
+      logs: (data.OPERATION_LOGS || []).length
+    }
+
+    return { valid: true, summary }
+  }
+
+  /**
+   * 导入数据（用于恢复），含校验
+   * @param {object} data - 待导入的数据
+   * @returns {object} { success: boolean, error?: string }
    */
   importAllData(data) {
+    const validation = this.validateImportData(data)
+    if (!validation.valid) {
+      return { success: false, error: validation.error }
+    }
+
+    // 清除缓存
+    this._cache = {}
+
+    // 先写入设置
+    if (data.SETTINGS) {
+      this.set(KEYS.SETTINGS, data.SETTINGS)
+    }
+
+    // 再写入其他集合
     for (const [name, key] of Object.entries(KEYS)) {
-      if (data[name]) {
+      if (name === 'SETTINGS') continue
+      if (Array.isArray(data[name])) {
         this.set(key, data[name])
       }
     }
+
+    return { success: true, summary: validation.summary }
   }
 
   /**

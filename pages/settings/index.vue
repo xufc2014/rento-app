@@ -8,10 +8,11 @@
         <view class="type-rate-header">
           <view class="type-badge" :class="'badge-' + typeName">{{ typeName }}</view>
         </view>
-        <view class="type-rate-row">
-          <view class="type-rate-item">
-            <text class="type-rate-label">水费</text>
-            <view class="input-wrap-sm">
+        <!-- 纵向排列：每个费种单独一行 -->
+        <view class="type-rate-col">
+          <view class="form-group">
+            <text class="form-label">水费单价</text>
+            <view class="input-wrap">
               <text class="input-prefix">¥</text>
               <input
                 class="form-input"
@@ -21,11 +22,11 @@
                 placeholder="元/吨"
               />
             </view>
-            <text class="type-rate-unit">元/吨</text>
+            <text class="form-hint">每吨水价格</text>
           </view>
-          <view class="type-rate-item">
-            <text class="type-rate-label">电费</text>
-            <view class="input-wrap-sm">
+          <view class="form-group">
+            <text class="form-label">电费单价</text>
+            <view class="input-wrap">
               <text class="input-prefix">¥</text>
               <input
                 class="form-input"
@@ -35,11 +36,11 @@
                 placeholder="元/度"
               />
             </view>
-            <text class="type-rate-unit">元/度</text>
+            <text class="form-hint">每度电价格</text>
           </view>
-          <view class="type-rate-item">
-            <text class="type-rate-label">气费</text>
-            <view class="input-wrap-sm">
+          <view class="form-group">
+            <text class="form-label">气费单价</text>
+            <view class="input-wrap">
               <text class="input-prefix">¥</text>
               <input
                 class="form-input"
@@ -49,7 +50,7 @@
                 placeholder="元/方"
               />
             </view>
-            <text class="type-rate-unit">元/方</text>
+            <text class="form-hint">每方气价格</text>
           </view>
         </view>
       </view>
@@ -230,6 +231,36 @@
     <view class="card">
       <view class="card-title">数据管理</view>
 
+      <!-- 当前数据概览 -->
+      <view class="data-summary" v-if="dataSummary">
+        <view class="summary-row">
+          <view class="summary-item">
+            <text class="summary-num">{{ dataSummary.buildings.count }}</text>
+            <text class="summary-label">楼栋</text>
+          </view>
+          <view class="summary-item">
+            <text class="summary-num">{{ dataSummary.rooms.count }}</text>
+            <text class="summary-label">房间</text>
+          </view>
+          <view class="summary-item">
+            <text class="summary-num">{{ dataSummary.tenants.count }}</text>
+            <text class="summary-label">租客</text>
+          </view>
+          <view class="summary-item">
+            <text class="summary-num">{{ dataSummary.contracts.active }}</text>
+            <text class="summary-label">活跃合同</text>
+          </view>
+          <view class="summary-item">
+            <text class="summary-num">{{ dataSummary.bills.count }}</text>
+            <text class="summary-label">账单</text>
+          </view>
+          <view class="summary-item">
+            <text class="summary-num">{{ dataSummary.readings.count }}</text>
+            <text class="summary-label">抄表记录</text>
+          </view>
+        </view>
+      </view>
+
       <view class="data-actions">
         <view class="btn-big btn-primary" @click="exportData">导出数据备份</view>
         <view class="btn-big btn-warning" @click="triggerImport">导入数据恢复</view>
@@ -241,9 +272,17 @@
     <view class="card">
       <view class="card-title">调试工具</view>
 
+      <!-- 月份选择 -->
+      <view class="form-item" style="margin-bottom: 12px;">
+        <text class="form-label">测试数据月份</text>
+        <picker mode="date" fields="month" :value="seedMonthPick" @change="onSeedMonthPick">
+          <view class="form-picker-val">{{ seedMonthCN }}</view>
+        </picker>
+      </view>
+
       <view class="data-actions">
         <view class="btn-big" style="background:#9C27B0;color:#fff;" @click="seedMeterReadings">
-          生成抄表测试数据（2026年5月）
+          生成抄表测试数据（{{ seedMonthCN }}）
         </view>
       </view>
       <text class="form-hint">清空现有抄表数据，为每个房间随机生成初始水/电表读数</text>
@@ -274,16 +313,54 @@
       </view>
     </view>
 
+    <!-- 导入确认弹窗 -->
+    <view class="modal-mask" v-if="showImportConfirm" @click="showImportConfirm = false">
+      <view class="modal-box import-modal" @click.stop>
+        <text class="modal-title" style="color:#FF9500;">确认导入数据</text>
+        <text class="modal-desc">将用备份文件覆盖当前所有数据，此操作不可撤销。</text>
+
+        <view class="import-summary" v-if="importPreview">
+          <view class="import-summary-title">备份文件内容</view>
+          <view class="import-summary-item">
+            <text class="is-label">导出时间</text>
+            <text class="is-value">{{ formatDate(importPreview.exportedAt) }}</text>
+          </view>
+          <view class="import-summary-grid">
+            <view class="import-summary-item">
+              <text class="is-label">楼栋</text>
+              <text class="is-num">{{ importPreview.buildings }} 个</text>
+            </view>
+            <view class="import-summary-item">
+              <text class="is-label">房间</text>
+              <text class="is-num">{{ importPreview.rooms }} 间</text>
+            </view>
+            <view class="import-summary-item">
+              <text class="is-label">租客</text>
+              <text class="is-num">{{ importPreview.tenants }} 人</text>
+            </view>
+            <view class="import-summary-item">
+              <text class="is-label">合同</text>
+              <text class="is-num">{{ importPreview.contracts }} 份</text>
+            </view>
+            <view class="import-summary-item">
+              <text class="is-label">抄表记录</text>
+              <text class="is-num">{{ importPreview.readings }} 条</text>
+            </view>
+            <view class="import-summary-item">
+              <text class="is-label">账单</text>
+              <text class="is-num">{{ importPreview.bills }} 条</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="modal-buttons">
+          <view class="btn-big modal-btn-cancel" @click="showImportConfirm = false">取消</view>
+          <view class="btn-big btn-warning modal-btn-confirm" @click="confirmImport">确认导入</view>
+        </view>
+      </view>
+    </view>
+
     <!-- 导入数据（隐藏的文件选择触发） -->
-    <!-- #ifdef H5 -->
-    <input
-      ref="importInput"
-      type="file"
-      accept=".json"
-      style="display:none"
-      @change="onFileSelected"
-    />
-    <!-- #endif -->
   </view>
 </template>
 
@@ -291,6 +368,24 @@
 import { ref, reactive, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import db from '@/utils/db.js'
+
+// 初始化测试数据月份（默认当前月）
+function getDefaultSeedMonth() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+const seedMonthPick = ref(getDefaultSeedMonth())
+const seedMonthCN = computed(() => {
+  if (!seedMonthPick.value) return '请选择'
+  const [y, m] = seedMonthPick.value.split('-')
+  const months = ['一','二','三','四','五','六','七','八','九','十','十一','十二']
+  return `${y}年${months[Number(m)-1]}月`
+})
+
+function onSeedMonthPick(e) {
+  seedMonthPick.value = e.detail.value
+}
 
 // ============ 选项配置 ============
 
@@ -330,7 +425,10 @@ const form = reactive({
 })
 
 const showClearConfirm = ref(false)
-const importInput = ref(null)
+const showImportConfirm = ref(false)
+const importPreview = ref(null)          // 导入文件摘要
+const pendingImportData = ref(null)      // 待导入的原始数据
+const dataSummary = ref(null)            // 当前数据摘要
 
 // 押金规则 picker 索引
 const depositIndex = computed(() => {
@@ -361,6 +459,8 @@ function loadSettings() {
   form.lateFeeStartDay = String(settings.lateFeeStartDay)
   form.lateFeePerDay = String(settings.lateFeePerDay)
   form.contractExpiryWarningDays = [...settings.contractExpiryWarningDays]
+  // 加载数据摘要
+  dataSummary.value = db.getDataSummary()
 }
 
 // ============ 保存操作 ============
@@ -440,30 +540,56 @@ function toggleWarningDay(day) {
 
 // ============ 数据管理 ============
 
+/**
+ * 获取备份文件名（带时间戳）
+ */
+function getBackupFileName() {
+  const now = new Date()
+  const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
+  return `房东通_数据备份_${ts}.json`
+}
+
+/**
+ * 格式化日期时间
+ */
+function formatDate(isoStr) {
+  if (!isoStr) return '未知'
+  try {
+    const d = new Date(isoStr)
+    const pad = n => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  } catch {
+    return isoStr
+  }
+}
+
+/**
+ * 导出数据
+ */
 function exportData() {
   try {
     const data = db.exportAllData()
     const jsonStr = JSON.stringify(data, null, 2)
+    const fileName = getBackupFileName()
+    const summary = db.getDataSummary()
 
-    // H5 环境使用 Blob 下载
+    // 导出提示
+    const tip = `楼栋${summary.buildings.count}个 · 房间${summary.rooms.count}间 · 账单${summary.bills.count}条`
+
     // #ifdef H5
     const blob = new Blob([jsonStr], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    const now = new Date()
-    const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
     a.href = url
-    a.download = `房东通_数据备份_${timestamp}.json`
+    a.download = fileName
     a.click()
     URL.revokeObjectURL(url)
-    uni.showToast({ title: '导出成功', icon: 'success' })
+    uni.showToast({ title: `已导出: ${tip}`, icon: 'success', duration: 2500 })
     // #endif
 
     // #ifdef MP-WEIXIN
     const fs = uni.getFileSystemManager()
-    const now = new Date()
-    const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
-    const filePath = `${wx.env.USER_DATA_PATH}/rento_backup_${timestamp}.json`
+    const filePath = `${wx.env.USER_DATA_PATH}/${fileName}`
     fs.writeFile({
       filePath,
       data: jsonStr,
@@ -471,12 +597,12 @@ function exportData() {
       success: () => {
         uni.shareFileMessage({
           filePath,
-          fileName: `房东通_数据备份_${timestamp}.json`,
+          fileName,
           success: () => {
-            uni.showToast({ title: '导出成功', icon: 'success' })
+            uni.showToast({ title: `已导出: ${tip}`, icon: 'success', duration: 2500 })
           },
           fail: () => {
-            uni.showToast({ title: '导出成功，文件已保存', icon: 'success' })
+            uni.showToast({ title: `已保存: ${tip}`, icon: 'success', duration: 2500 })
           }
         })
       },
@@ -487,28 +613,49 @@ function exportData() {
     // #endif
 
     // #ifdef APP-PLUS
-    const now = new Date()
-    const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
-    const filePath = `_doc/rento_backup_${timestamp}.json`
-    plus.io.requestFileSystem(plus.io.PRIVATE_DOC, (fs) => {
-      fs.root.getFile(filePath, { create: true }, (fileEntry) => {
+    // 保存到公共下载目录（手机文件管理器可见）
+    plus.io.requestFileSystem(plus.io.PUBLIC_DOWNLOADS, (fs) => {
+      fs.root.getFile(fileName, { create: true }, (fileEntry) => {
         fileEntry.createWriter((writer) => {
+          writer.onwrite = () => {
+            const absPath = plus.io.convertLocalFileSystemURL(fileEntry.fullPath)
+            uni.showModal({
+              title: '备份已保存',
+              content: `文件已保存到下载目录：\n\n${fileName}\n\n可通过手机"文件管理"找到此文件，发送到微信或电脑保存。`,
+              showCancel: false,
+              confirmText: '知道了'
+            })
+          }
+          writer.onerror = () => {
+            uni.showToast({ title: '导出失败：无法写入文件', icon: 'error' })
+          }
           writer.write(jsonStr)
-          uni.showToast({ title: `已保存到 ${filePath}`, icon: 'success' })
         })
+      }, () => {
+        uni.showToast({ title: '导出失败：无法创建文件', icon: 'error' })
       })
+    }, () => {
+      uni.showToast({ title: '导出失败：无法访问存储', icon: 'error' })
     })
     // #endif
   } catch (e) {
-    uni.showToast({ title: '导出失败: ' + e.message, icon: 'error' })
+    uni.showToast({ title: '导出失败: ' + e.message, icon: 'error', duration: 3000 })
   }
 }
 
+/**
+ * 触发导入（按平台选择不同方式）
+ */
 function triggerImport() {
   // #ifdef H5
-  if (importInput.value) {
-    importInput.value.click()
-  }
+  // 动态创建 file input 触发文件选择（比模板内隐藏 input 更可靠）
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.json'
+  input.onchange = onFileSelected
+  document.body.appendChild(input)
+  input.click()
+  document.body.removeChild(input)
   // #endif
 
   // #ifdef MP-WEIXIN
@@ -521,37 +668,82 @@ function triggerImport() {
       const fs = uni.getFileSystemManager()
       try {
         const dataStr = fs.readFileSync(filePath, 'utf8')
-        const data = JSON.parse(dataStr)
-        db.importAllData(data)
-        loadSettings()
-        uni.showToast({ title: '数据导入成功', icon: 'success' })
+        handleImportData(dataStr)
       } catch (e) {
-        uni.showToast({ title: '导入失败，请检查文件格式', icon: 'error' })
+        uni.showToast({ title: '读取文件失败', icon: 'error' })
       }
     }
   })
   // #endif
+
+  // #ifdef APP-PLUS
+  // APP 端也用动态创建 file input（WebView 中 uni.chooseFile 不可用）
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.json'
+  input.onchange = onFileSelected
+  document.body.appendChild(input)
+  input.click()
+  document.body.removeChild(input)
+  // #endif
+}
+
+/**
+ * 处理导入的JSON数据（先校验，再弹确认框）
+ */
+function handleImportData(dataStr) {
+  try {
+    const data = JSON.parse(dataStr)
+    const validation = db.validateImportData(data)
+    if (!validation.valid) {
+      uni.showModal({
+        title: '文件校验失败',
+        content: validation.error + '\n\n请选择正确的房东通备份文件（.json格式）',
+        showCancel: false,
+        confirmText: '知道了'
+      })
+      return
+    }
+    // 校验通过，保存数据并弹出确认框
+    pendingImportData.value = data
+    importPreview.value = validation.summary
+    showImportConfirm.value = true
+  } catch (e) {
+    uni.showToast({ title: '文件格式错误，无法解析JSON', icon: 'error', duration: 2500 })
+  }
+}
+
+/**
+ * 确认执行导入
+ */
+function confirmImport() {
+  if (!pendingImportData.value) return
+  const result = db.importAllData(pendingImportData.value)
+  showImportConfirm.value = false
+  pendingImportData.value = null
+  importPreview.value = null
+
+  if (result.success) {
+    loadSettings()
+    uni.showToast({ title: '数据导入成功', icon: 'success', duration: 2500 })
+  } else {
+    uni.showToast({ title: '导入失败: ' + (result.error || '未知错误'), icon: 'error', duration: 3000 })
+  }
 }
 
 // H5 环境文件选择回调
 function onFileSelected(e) {
-  // #ifdef H5
   const file = e.target.files[0]
   if (!file) return
 
   const reader = new FileReader()
   reader.onload = (event) => {
-    try {
-      const data = JSON.parse(event.target.result)
-      db.importAllData(data)
-      loadSettings()
-      uni.showToast({ title: '数据导入成功', icon: 'success' })
-    } catch (err) {
-      uni.showToast({ title: '导入失败，请检查文件格式', icon: 'error' })
-    }
+    handleImportData(event.target.result)
+  }
+  reader.onerror = () => {
+    uni.showToast({ title: '读取文件失败', icon: 'error' })
   }
   reader.readAsText(file)
-  // #endif
 }
 
 function confirmClearAll() {
@@ -564,12 +756,14 @@ function confirmClearAll() {
 // ============ 调试工具 ============
 
 function seedMeterReadings() {
+  const month = seedMonthPick.value
+  const monthLabel = seedMonthCN.value
   uni.showModal({
     title: '生成测试数据',
-    content: '将清空现有抄表数据，为每个房间随机生成2026年5月的初始水/电表读数。确定？',
+    content: `将清空现有抄表数据，为每个房间随机生成${monthLabel}的初始水/电表读数。确定？`,
     success: (res) => {
       if (res.confirm) {
-        const result = db.seedMeterReadings()
+        const result = db.seedMeterReadings(month)
         if (result.error) {
           uni.showToast({ title: result.error, icon: 'none' })
         } else {
@@ -659,6 +853,7 @@ onShow(() => {
   color: #333333;
   height: 100%;
   background: transparent;
+  min-width: 0;
 }
 
 .form-input-center {
@@ -819,14 +1014,20 @@ onShow(() => {
   font-weight: 700;
   color: #333;
   margin-right: 4px;
+  flex-shrink: 0;
 }
 
-.input-wrap-sm .form-input {
+.input-wrap-sm :deep(input),
+.input-wrap-sm :deep(.uni-input-input) {
   flex: 1;
+  width: 0;
+  min-width: 0;
   font-size: 15px;
   color: #333;
   height: 100%;
   background: transparent;
+  border: none;
+  outline: none;
 }
 
 /* ========== 数据操作 ========== */
@@ -863,6 +1064,101 @@ onShow(() => {
 /* ========== 底部占位 ========== */
 .bottom-placeholder {
   height: 100px;
+}
+
+/* ========== 数据概览 ========== */
+.data-summary {
+  background-color: #f8f8f8;
+  border-radius: 10px;
+  padding: 14px 12px;
+  margin-bottom: 18px;
+}
+
+.summary-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.summary-item {
+  flex: 0 0 calc(33.33% - 6px);
+  text-align: center;
+  padding: 8px 4px;
+  background-color: #ffffff;
+  border-radius: 8px;
+}
+
+.summary-num {
+  display: block;
+  font-size: 22px;
+  font-weight: 700;
+  color: #007AFF;
+}
+
+.summary-label {
+  display: block;
+  font-size: 12px;
+  color: #999999;
+  margin-top: 2px;
+}
+
+/* ========== 导入预览弹窗 ========== */
+.import-modal {
+  width: 340px;
+}
+
+.import-summary {
+  background-color: #f8f8f8;
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 20px;
+  width: 100%;
+}
+
+.import-summary-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333333;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.import-summary-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 0.5px solid #e8e8e8;
+}
+
+.import-summary-item:last-child {
+  border-bottom: none;
+}
+
+.is-label {
+  font-size: 14px;
+  color: #666666;
+}
+
+.is-value {
+  font-size: 14px;
+  color: #999999;
+}
+
+.is-num {
+  font-size: 14px;
+  font-weight: 600;
+  color: #FF9500;
+}
+
+.import-summary-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+}
+
+.import-summary-grid .import-summary-item {
+  flex: 0 0 50%;
 }
 
 /* ========== 按钮样式补充 ========== */

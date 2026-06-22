@@ -53,9 +53,9 @@
     <!-- 底部占位 -->
     <view class="bottom-placeholder"></view>
 
-    <!-- 生成下月账单按钮 -->
+    <!-- 查看账单按钮 -->
     <view class="footer-bar">
-      <view class="btn-big btn-primary" @click="goGenerate">生成下月账单</view>
+      <view class="btn-big btn-primary" @click="viewCurrentMonth">查看账单</view>
     </view>
   </view>
 </template>
@@ -64,7 +64,7 @@
 import { ref, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import db from '@/utils/db.js'
-import { getCurrentMonth, getNextMonth } from '@/utils/date.js'
+import { getCurrentMonth } from '@/utils/date.js'
 import { formatAmount } from '@/utils/calc.js'
 
 const currentMonth = ref(getCurrentMonth())
@@ -82,7 +82,12 @@ function prevMonth() {
 }
 
 function nextMonth() {
-  currentMonth.value = getNextMonth(currentMonth.value)
+  const [year, month] = currentMonth.value.split('-').map(Number)
+  if (month === 12) {
+    currentMonth.value = `${year + 1}-01`
+  } else {
+    currentMonth.value = `${year}-${String(month + 1).padStart(2, '0')}`
+  }
   loadData()
 }
 
@@ -141,8 +146,8 @@ function goDetail(billId) {
   uni.navigateTo({ url: `/pages/bill/detail?id=${billId}` })
 }
 
-function goGenerate() {
-  uni.navigateTo({ url: '/pages/bill/generate' })
+function viewCurrentMonth() {
+  loadData()
 }
 </script>
 
