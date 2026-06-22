@@ -37,6 +37,20 @@
             </view>
             <text class="type-rate-unit">元/度</text>
           </view>
+          <view class="type-rate-item">
+            <text class="type-rate-label">气费</text>
+            <view class="input-wrap-sm">
+              <text class="input-prefix">¥</text>
+              <input
+                class="form-input"
+                type="digit"
+                :value="typeRates[typeName]?.gasRate"
+                @input="e => onTypeRateInput(typeName, 'gasRate', e.detail.value)"
+                placeholder="元/方"
+              />
+            </view>
+            <text class="type-rate-unit">元/方</text>
+          </view>
         </view>
       </view>
 
@@ -297,9 +311,9 @@ const contractWarningOptions = [
 const typeNames = ['民房', '公寓', '商铺']
 
 const typeRates = reactive({
-  '民房': { waterRate: '', electricRate: '' },
-  '公寓': { waterRate: '', electricRate: '' },
-  '商铺': { waterRate: '', electricRate: '' }
+  '民房': { waterRate: '', electricRate: '', gasRate: '' },
+  '公寓': { waterRate: '', electricRate: '', gasRate: '' },
+  '商铺': { waterRate: '', electricRate: '', gasRate: '' }
 })
 
 const form = reactive({
@@ -330,10 +344,11 @@ function loadSettings() {
   const settings = db.getSettings()
   const savedTypeRates = settings.typeRates || {}
   for (const t of typeNames) {
-    const r = savedTypeRates[t] || { waterRate: '', electricRate: '' }
+    const r = savedTypeRates[t] || { waterRate: '', electricRate: '', gasRate: '' }
     typeRates[t] = {
       waterRate: String(r.waterRate ?? ''),
-      electricRate: String(r.electricRate ?? '')
+      electricRate: String(r.electricRate ?? ''),
+      gasRate: String(r.gasRate ?? '')
     }
   }
   form.internetFee = String(settings.internetFee)
@@ -359,7 +374,8 @@ function saveTypeRates() {
   for (const t of typeNames) {
     typeRatesData[t] = {
       waterRate: parseFloat(typeRates[t].waterRate) || 0,
-      electricRate: parseFloat(typeRates[t].electricRate) || 0
+      electricRate: parseFloat(typeRates[t].electricRate) || 0,
+      gasRate: parseFloat(typeRates[t].gasRate) || 0
     }
   }
   db.updateSettings({ typeRates: typeRatesData })

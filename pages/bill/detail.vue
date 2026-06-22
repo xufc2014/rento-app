@@ -44,6 +44,15 @@
         <image :src="electricPhoto" mode="widthFix" class="photo-thumb" @click="previewImage(electricPhoto)" />
       </view>
 
+      <!-- 气费 -->
+      <view class="detail-row" v-if="bill.gasFee > 0">
+        <view class="detail-left">
+          <text class="detail-label">气费</text>
+          <text class="detail-sub" v-if="gasInfo">{{ gasInfo }}</text>
+        </view>
+        <text class="detail-value">{{ formatAmount(bill.gasFee) }}</text>
+      </view>
+
       <!-- 网费 -->
       <view class="detail-row">
         <text class="detail-label">网费</text>
@@ -129,6 +138,7 @@ const roomLabel = ref('')
 const tenantName = ref('')
 const waterInfo = ref('')
 const electricInfo = ref('')
+const gasInfo = ref('')
 const waterPhoto = ref('')
 const electricPhoto = ref('')
 const lateFeePerDay = ref(5)
@@ -175,6 +185,11 @@ function loadBill() {
   if (electricReading) {
     electricInfo.value = `上次${electricReading.previousValue} → 本次${electricReading.readingValue}，用量${electricReading.consumption}`
     electricPhoto.value = electricReading.photoPath || ''
+  }
+
+  const gasReading = db.getLatestReading(b.roomId, 'gas')
+  if (gasReading) {
+    gasInfo.value = `上次${gasReading.previousValue} → 本次${gasReading.readingValue}，用量${gasReading.consumption}`
   }
 
   // 滞纳金设置

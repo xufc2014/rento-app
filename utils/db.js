@@ -23,9 +23,9 @@ const KEYS = {
 // 默认设置
 const DEFAULT_SETTINGS = {
   typeRates: {
-    '民房': { waterRate: 5, electricRate: 1 },
-    '公寓': { waterRate: 8, electricRate: 1 },
-    '商铺': { waterRate: 8, electricRate: 1 }
+    '民房': { waterRate: 5, electricRate: 1, gasRate: 5 },
+    '公寓': { waterRate: 8, electricRate: 1, gasRate: 5 },
+    '商铺': { waterRate: 8, electricRate: 1, gasRate: 5 }
   },
   internetFee: 50,               // 元/月
   sanitationFee: 20,              // 卫生费/月
@@ -103,10 +103,10 @@ class Database {
   }
 
   /**
-   * 获取某房间的水电单价
+   * 获取某房间的水电燃气单价
    * 优先级：房间自定义 > 类型默认 > 全局默认
    * @param {string} roomId
-   * @param {string} meterType - 'water' 或 'electric'
+   * @param {string} meterType - 'water' / 'electric' / 'gas'
    * @returns {number}
    */
   getRoomRate(roomId, meterType) {
@@ -114,9 +114,16 @@ class Database {
     const settings = this.getSettings()
     const typeRates = settings.typeRates || DEFAULT_SETTINGS.typeRates
 
+    // 字段名映射
+    const fieldMap = {
+      water: 'waterRate',
+      electric: 'electricRate',
+      gas: 'gasRate'
+    }
+    const roomField = meterType === 'water' ? 'waterRate' : (meterType === 'electric' ? 'electricRate' : 'gasRate')
+
     // 1. 房间自定义单价优先
     if (room) {
-      const roomField = meterType === 'water' ? 'waterRate' : 'electricRate'
       if (room[roomField] != null && room[roomField] !== 0) {
         return Number(room[roomField])
       }
@@ -125,16 +132,15 @@ class Database {
       const unitType = room.unitType || '民房'
       const typeConfig = typeRates[unitType]
       if (typeConfig) {
-        const typeField = meterType === 'water' ? 'waterRate' : 'electricRate'
-        if (typeConfig[typeField] != null) {
-          return Number(typeConfig[typeField])
+        if (typeConfig[fieldMap[meterType]] != null) {
+          return Number(typeConfig[fieldMap[meterType]])
         }
       }
     }
 
     // 3. 最终兜底
-    const fallback = typeRates['民房'] || { waterRate: 5, electricRate: 1 }
-    return Number(fallback[meterType === 'water' ? 'waterRate' : 'electricRate'] || 0)
+    const fallback = typeRates['民房'] || { waterRate: 5, electricRate: 1, gasRate: 5 }
+    return Number(fallback[fieldMap[meterType]] || 0)
   }
 
   // ============ Buildings ============
@@ -500,6 +506,23 @@ class Database {
 
   /**
    * 签订合同
+   * @param {object} contract - 合同数据
+   * @param {string} contract.roomId
+   * @param {string} contract.tenantId
+   * @param {string} contract.startDate
+   * @param {string} contract.endDate
+   * @param {number} contract.rentAmount
+   * @param {number} contract.depositAmount
+   * @param {string} contract.depositRule
+   * @param {number} contract.extraDeposit
+   * @param {string} contract.extraDepositNote
+   * @param {number} contract.internetFee
+   * @param {number} contract.sanitationFee
+   * @param {number} contract.managementFee
+   * @param {number} contract.otherFee
+   * @param {number} contract.initialWaterReading - 水表底读（可选）
+   * @param {number} contract.initialElectricReading - 电表底读（可选）
+   * @param {number} contract.initialGasReading - 气表底读（可选）
    */
   addContract(contract) {
     const contracts = this.getContracts()
@@ -524,12 +547,19 @@ class Database {
       sanitationFee: contract.sanitationFee || 0,
       managementFee: contract.managementFee || 0,
       otherFee: contract.otherFee || 0,
+      // 初始读数（底读）
+      initialWaterReading: contract.initialWaterReading != null ? Number(contract.initialWaterReading) : null,
+      initialElectricReading: contract.initialElectricReading != null ? Number(contract.initialElectricReading) : null,
+      initialGasReading: contract.initialGasReading != null ? Number(contract.initialGasReading) : null,
       status: '活跃',
       parentId: null,
       createdAt: new Date().toISOString()
     }
     contracts.push(newContract)
     this.set(KEYS.CONTRACTS, contracts)
+
+    // 保存初始读数为抄表记录（date = 合同开始日期前一天，确保首月账单计算正确）
+    this._saveInitialReadings(newContract, contract)
 
     // 更新房间状态和租金
     this.updateRoom(contract.roomId, {
@@ -542,6 +572,88 @@ class Database {
     this.logOperation('签订合同', 'contract', newContract.id,
       `${room.floor}-${room.roomNumber} 租客:${contract.tenantId}`)
     return newContract
+  },
+
+  /**
+   * 保存初始读数为抄表记录
+   * 将初始读数保存为 readingDate = contract.startDate 的抄表记录
+   * 这样 calcUtilityFee 在计算首月账单时能正确找到基准读数
+   * @param {object} contract - 新合同对象
+   * @param {object} contractData - 原始合同数据（含 initialReadings）
+   */
+  _saveInitialReadings(contract, contractData) {
+    const startDate = new Date(contract.startDate)
+    // 初始读数日期设为合同开始日期（当天），这样首月账单能正确计算
+    const readingDate = contract.startDate + 'T00:00:00.000Z'
+
+    const readings = this.getMeterReadings()
+
+    // 水表底读
+    if (contractData.initialWaterReading != null && contractData.initialWaterReading !== '') {
+      const waterReading = {
+        id: generateId(),
+        roomId: contract.roomId,
+        meterType: 'water',
+        readingValue: Number(contractData.initialWaterReading),
+        previousValue: 0,
+        consumption: 0,  // 初始读数无用量
+        isAnomaly: false,
+        anomalyType: null,
+        isAnomalyConfirmed: true,
+        photoPath: null,
+        readingDate: readingDate,
+        notes: '入住底读',
+        isInitial: true,  // 标记为初始读数
+        createdAt: new Date().toISOString()
+      }
+      readings.push(waterReading)
+    }
+
+    // 电表底读
+    if (contractData.initialElectricReading != null && contractData.initialElectricReading !== '') {
+      const electricReading = {
+        id: generateId(),
+        roomId: contract.roomId,
+        meterType: 'electric',
+        readingValue: Number(contractData.initialElectricReading),
+        previousValue: 0,
+        consumption: 0,
+        isAnomaly: false,
+        anomalyType: null,
+        isAnomalyConfirmed: true,
+        photoPath: null,
+        readingDate: readingDate,
+        notes: '入住底读',
+        isInitial: true,
+        createdAt: new Date().toISOString()
+      }
+      readings.push(electricReading)
+    }
+
+    // 气表底读
+    if (contractData.initialGasReading != null && contractData.initialGasReading !== '') {
+      const gasReading = {
+        id: generateId(),
+        roomId: contract.roomId,
+        meterType: 'gas',
+        readingValue: Number(contractData.initialGasReading),
+        previousValue: 0,
+        consumption: 0,
+        isAnomaly: false,
+        anomalyType: null,
+        isAnomalyConfirmed: true,
+        photoPath: null,
+        readingDate: readingDate,
+        notes: '入住底读',
+        isInitial: true,
+        createdAt: new Date().toISOString()
+      }
+      readings.push(gasReading)
+    }
+
+    if (readings.length > this.getMeterReadings().length) {
+      this.set(KEYS.METER_READINGS, readings)
+    }
   }
 
   /**
@@ -770,9 +882,10 @@ class Database {
 
     const settings = this.getSettings()
 
-    // 计算水电费
+    // 计算水电燃气费
     const waterFee = calcUtilityFee(roomId, 'water', month, this)
     const electricFee = calcUtilityFee(roomId, 'electric', month, this)
+    const gasFee = calcUtilityFee(roomId, 'gas', month, this)
 
     const rentAmount = contract.rentAmount
     const internetFee = room.internetFee || settings.internetFee
@@ -782,7 +895,7 @@ class Database {
     const deduction = options.deduction || 0
     const deductionReason = options.deductionReason || ''
 
-    const totalAmount = rentAmount + waterFee + electricFee + internetFee + sanitationFee + managementFee + otherFee - deduction
+    const totalAmount = rentAmount + waterFee + electricFee + gasFee + internetFee + sanitationFee + managementFee + otherFee - deduction
 
     const bill = {
       id: generateId(),
@@ -793,6 +906,7 @@ class Database {
       rentAmount: rentAmount,
       waterFee: waterFee,
       electricFee: electricFee,
+      gasFee: gasFee,
       internetFee: internetFee,
       sanitationFee: sanitationFee,
       managementFee: managementFee,
@@ -881,11 +995,12 @@ class Database {
     const contract = this.getContractById(room.currentContractId)
     const settings = this.getSettings()
 
-    // 获取最终水电读数（使用用户在退租页面手动输入的读数和已计算好的费用）
-    // 优先使用传入的 waterFee/electricFee（由 checkout 页面基于用户输入读数计算）
+    // 获取最终水电燃气读数（使用用户在退租页面手动输入的读数和已计算好的费用）
+    // 优先使用传入的 waterFee/electricFee/gasFee（由 checkout 页面基于用户输入读数计算）
     // 如果没有传入，则从数据库历史读数计算（兜底）
     const waterFee = data.waterFee != null ? data.waterFee : calcUtilityFee(data.roomId, 'water', null, this)
     const electricFee = data.electricFee != null ? data.electricFee : calcUtilityFee(data.roomId, 'electric', null, this)
+    const gasFee = data.gasFee != null ? data.gasFee : calcUtilityFee(data.roomId, 'gas', null, this)
 
     const repairDeduction = data.repairDeduction || 0
     const unpaidRent = data.unpaidRent || 0
@@ -895,8 +1010,8 @@ class Database {
     const extraDeposit = contract ? (contract.extraDeposit || 0) : 0
     const totalDeposit = baseDeposit + extraDeposit
 
-    // 应退金额 = 总押金 - 水电 - 维修扣款 - 未交房租
-    const totalReturn = totalDeposit - waterFee - electricFee - repairDeduction - unpaidRent
+    // 应退金额 = 总押金 - 水费 - 电费 - 气费 - 维修扣款 - 未交房租
+    const totalReturn = totalDeposit - waterFee - electricFee - gasFee - repairDeduction - unpaidRent
 
     const record = {
       id: generateId(),
@@ -906,8 +1021,10 @@ class Database {
       checkoutDate: data.checkoutDate || new Date().toISOString(),
       finalWaterReading: data.finalWaterReading,
       finalElectricReading: data.finalElectricReading,
+      finalGasReading: data.finalGasReading,
       waterFee: waterFee,
       electricFee: electricFee,
+      gasFee: gasFee,
       repairDeduction: repairDeduction,
       repairNotes: data.repairNotes || '',
       unpaidRent: unpaidRent,

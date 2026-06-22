@@ -3,9 +3,9 @@
  */
 
 /**
- * 计算某房间某月的水电费
+ * 计算某房间某月的水电燃气费
  * @param {string} roomId - 房间ID
- * @param {string} meterType - 'water' 或 'electric'
+ * @param {string} meterType - 'water' / 'electric' / 'gas'
  * @param {string|null} month - 月份 '2026-06'，null则用最近一次抄表（退租场景）
  * @param {object} db - 数据库实例
  */
@@ -58,7 +58,7 @@ export function calcUtilityFee(roomId, meterType, month, db) {
 
 /**
  * 计算月度账单总额
- * 公式: 房租 + 水费 + 电费 + 网费 - 减免 = 应付总额
+ * 公式: 房租 + 水费 + 电费 + 燃气费 + 网费 + 卫生费 + 管理费 + 其他费用 - 减免 = 应付总额
  */
 export function calcBillTotal(roomId, month, db, deduction = 0) {
   const room = db.getRoomById(roomId)
@@ -70,9 +70,13 @@ export function calcBillTotal(roomId, month, db, deduction = 0) {
   const rentAmount = contract.rentAmount
   const waterFee = calcUtilityFee(roomId, 'water', month, db)
   const electricFee = calcUtilityFee(roomId, 'electric', month, db)
+  const gasFee = calcUtilityFee(roomId, 'gas', month, db)
   const internetFee = room.internetFee || settings.internetFee
+  const sanitationFee = contract.sanitationFee || settings.sanitationFee || 0
+  const managementFee = contract.managementFee || settings.managementFee || 0
+  const otherFee = contract.otherFee || settings.otherFee || 0
 
-  return Math.round((rentAmount + waterFee + electricFee + internetFee - deduction) * 100) / 100
+  return Math.round((rentAmount + waterFee + electricFee + gasFee + internetFee + sanitationFee + managementFee + otherFee - deduction) * 100) / 100
 }
 
 /**

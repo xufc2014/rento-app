@@ -170,8 +170,65 @@
       <view class="btn-big btn-secondary" style="margin-top: 12px;" @click="prevStep">上一步</view>
     </view>
 
-    <!-- 步骤5：确认签订 -->
+    <!-- 步骤5：录制初始读数（底读） -->
     <view class="card" v-if="currentStep === 4">
+      <view class="form-label">录入初始读数（底读）</view>
+      <text class="form-hint" style="margin-bottom: 16px; display: block;">记录入住时的水表/电表/气表读数，首月账单将以此为基础计算用量。如不填写则跳过。</text>
+
+      <!-- 水表底读 -->
+      <view class="meter-init-section">
+        <view class="meter-init-header">
+          <text class="meter-init-title">💧 水表底读</text>
+          <text class="meter-init-unit">单位：吨</text>
+        </view>
+        <view class="input-wrap-sm">
+          <input
+            class="form-input"
+            type="digit"
+            v-model="initialWaterReading"
+            placeholder="入住时水表读数（选填）"
+          />
+        </view>
+      </view>
+
+      <!-- 电表底读 -->
+      <view class="meter-init-section">
+        <view class="meter-init-header">
+          <text class="meter-init-title">⚡ 电表底读</text>
+          <text class="meter-init-unit">单位：度</text>
+        </view>
+        <view class="input-wrap-sm">
+          <input
+            class="form-input"
+            type="digit"
+            v-model="initialElectricReading"
+            placeholder="入住时电表读数（选填）"
+          />
+        </view>
+      </view>
+
+      <!-- 气表底读 -->
+      <view class="meter-init-section">
+        <view class="meter-init-header">
+          <text class="meter-init-title">🔥 气表底读</text>
+          <text class="meter-init-unit">单位：方</text>
+        </view>
+        <view class="input-wrap-sm">
+          <input
+            class="form-input"
+            type="digit"
+            v-model="initialGasReading"
+            placeholder="入住时气表读数（选填）"
+          />
+        </view>
+      </view>
+
+      <view class="btn-big btn-primary" style="margin-top: 20px;" @click="nextStep">下一步</view>
+      <view class="btn-big btn-secondary" style="margin-top: 12px;" @click="prevStep">上一步</view>
+    </view>
+
+    <!-- 步骤6：确认签订 -->
+    <view class="card" v-if="currentStep === 5">
       <view class="form-label">合同确认</view>
 
       <view class="confirm-row">
@@ -211,6 +268,25 @@
         <text class="confirm-value amount-red">{{ formatAmount(calcTotalDeposit) }}</text>
       </view>
 
+      <!-- 初始读数确认 -->
+      <view class="confirm-section-title">初始读数（底读）</view>
+      <view class="confirm-row" v-if="initialWaterReadingNum > 0">
+        <text class="confirm-label">水表底读</text>
+        <text class="confirm-value">{{ initialWaterReadingNum }} 吨</text>
+      </view>
+      <view class="confirm-row" v-if="initialElectricReadingNum > 0">
+        <text class="confirm-label">电表底读</text>
+        <text class="confirm-value">{{ initialElectricReadingNum }} 度</text>
+      </view>
+      <view class="confirm-row" v-if="initialGasReadingNum > 0">
+        <text class="confirm-label">气表底读</text>
+        <text class="confirm-value">{{ initialGasReadingNum }} 方</text>
+      </view>
+      <view class="confirm-row" v-if="!initialWaterReadingNum && !initialElectricReadingNum && !initialGasReadingNum">
+        <text class="confirm-label">初始读数</text>
+        <text class="confirm-value">未录入</text>
+      </view>
+
       <!-- 每月固定费用确认 -->
       <view class="confirm-section-title">每月固定费用</view>
       <view class="confirm-row" v-if="internetFeeNum > 0">
@@ -246,7 +322,7 @@ import { onLoad, onShow } from '@dcloudio/uni-app'
 import db from '@/utils/db.js'
 import { formatAmount } from '@/utils/calc.js'
 
-const steps = ['选房间', '选租客', '设日期', '设押金租金', '确认签订']
+const steps = ['选房间', '选租客', '设日期', '设押金租金', '录初始读数', '确认签订']
 const currentStep = ref(0)
 
 // 数据
@@ -264,6 +340,11 @@ const internetFee = ref('')
 const sanitationFee = ref('')
 const managementFee = ref('')
 const otherFee = ref('')
+
+// 初始读数（底读）
+const initialWaterReading = ref('')
+const initialElectricReading = ref('')
+const initialGasReading = ref('')
 
 const depositRules = ['押一付一', '押二付一', '押一付三']
 
@@ -295,6 +376,10 @@ const internetFeeNum = computed(() => Number(internetFee.value) || 0)
 const sanitationFeeNum = computed(() => Number(sanitationFee.value) || 0)
 const managementFeeNum = computed(() => Number(managementFee.value) || 0)
 const otherFeeNum = computed(() => Number(otherFee.value) || 0)
+
+const initialWaterReadingNum = computed(() => Number(initialWaterReading.value) || 0)
+const initialElectricReadingNum = computed(() => Number(initialElectricReading.value) || 0)
+const initialGasReadingNum = computed(() => Number(initialGasReading.value) || 0)
 
 const calcMonthlyTotal = computed(() => {
   return (Number(rentAmount.value) || 0) + internetFeeNum.value + sanitationFeeNum.value + managementFeeNum.value + otherFeeNum.value
@@ -452,7 +537,11 @@ function submitContract() {
     extraDepositNote: extraDepositNote.value,
     sanitationFee: sanitationFeeNum.value,
     managementFee: managementFeeNum.value,
-    otherFee: otherFeeNum.value
+    otherFee: otherFeeNum.value,
+    // 初始读数（底读）
+    initialWaterReading: initialWaterReadingNum.value || null,
+    initialElectricReading: initialElectricReadingNum.value || null,
+    initialGasReading: initialGasReadingNum.value || null
   })
 
   if (result.error) {
@@ -855,5 +944,49 @@ function submitContract() {
   margin-bottom: 4px;
   padding-top: 12px;
   border-top: 1px solid #f0f0f0;
+}
+
+/* ========== 初始读数录入 ========== */
+.meter-init-section {
+  background: #FAFAFA;
+  border-radius: 12rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  border-left: 6rpx solid #4CAF50;
+}
+
+.meter-init-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12rpx;
+}
+
+.meter-init-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.meter-init-unit {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.input-wrap-sm {
+  display: flex;
+  align-items: center;
+  background-color: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8rpx;
+  padding: 0 16rpx;
+  height: 80rpx;
+}
+
+.input-wrap-sm .form-input {
+  flex: 1;
+  font-size: 32rpx;
+  height: 100%;
+  background: transparent;
 }
 </style>

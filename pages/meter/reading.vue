@@ -119,6 +119,32 @@
             </view>
           </view>
 
+          <!-- ===== 气表 ===== -->
+          <view class="meter-section gas-section">
+            <view class="meter-header">
+              <text class="meter-title">🔥 气表</text>
+              <text class="meter-unit">单位：方</text>
+            </view>
+            <view class="last-reading-mini">
+              上次读数：<text class="last-val">{{ gasLastReading !== null ? gasLastReading : '无记录' }}</text>
+              <text v-if="gasLastDate" class="last-date">{{ formatDateCN(gasLastDate) }}</text>
+            </view>
+            <input
+              class="reading-input"
+              type="digit"
+              v-model="gasInput"
+              placeholder="输入本次气表读数（选填）"
+              @input="onGasInput"
+            />
+            <view class="meter-info" v-if="gasConsumption !== null && gasConsumption >= 0">
+              <text class="meter-consumption">用量 {{ gasConsumption }} 方</text>
+              <text class="meter-cost">≈ {{ gasEstimatedCost }}</text>
+            </view>
+            <view class="meter-warning" v-if="gasConsumption !== null && gasConsumption < 0">
+              ⚠️ 读数倒退，请检查
+            </view>
+          </view>
+
           <!-- 拍照（可选） -->
           <view class="photo-section">
             <view class="section-label">表底拍照（可选）</view>
@@ -304,20 +330,26 @@ const waterLastReading = ref(null)
 const waterLastDate = ref(null)
 const electricLastReading = ref(null)
 const electricLastDate = ref(null)
+const gasLastReading = ref(null)
+const gasLastDate = ref(null)
 
 function loadLastReadings() {
   if (!selectedRoomId.value) return
   const waterLast = db.getLatestReading(selectedRoomId.value, 'water')
   const electricLast = db.getLatestReading(selectedRoomId.value, 'electric')
+  const gasLast = db.getLatestReading(selectedRoomId.value, 'gas')
   waterLastReading.value = waterLast ? waterLast.readingValue : null
   waterLastDate.value = waterLast ? waterLast.readingDate : null
   electricLastReading.value = electricLast ? electricLast.readingValue : null
   electricLastDate.value = electricLast ? electricLast.readingDate : null
+  gasLastReading.value = gasLast ? gasLast.readingValue : null
+  gasLastDate.value = gasLast ? gasLast.readingDate : null
 }
 
 // ========== 本次读数 ==========
 const waterInput = ref('')
 const electricInput = ref('')
+const gasInput = ref('')
 const notes = ref('')
 const waterPhotoPath = ref('')
 const electricPhotoPath = ref('')
@@ -329,6 +361,11 @@ const waterValue = computed(() => {
 
 const electricValue = computed(() => {
   const val = parseFloat(electricInput.value)
+  return isNaN(val) ? null : val
+})
+
+const gasValue = computed(() => {
+  const val = parseFloat(gasInput.value)
   return isNaN(val) ? null : val
 })
 
@@ -356,6 +393,18 @@ const electricEstimatedCost = computed(() => {
   return formatAmount(cost)
 })
 
+const gasConsumption = computed(() => {
+  if (gasValue.value === null || gasLastReading.value === null) return null
+  return Math.round((gasValue.value - gasLastReading.value) * 100) / 100
+})
+
+const gasEstimatedCost = computed(() => {
+  if (gasConsumption.value === null || gasConsumption.value < 0 || !selectedRoomId.value) return ''
+  const rate = db.getRoomRate(selectedRoomId.value, 'gas')
+  const cost = Math.round(gasConsumption.value * rate * 100) / 100
+  return formatAmount(cost)
+})
+
 const canSubmit = computed(() => {
   return (waterValue.value !== null && waterValue.value >= 0) ||
          (electricValue.value !== null && electricValue.value >= 0)
@@ -363,6 +412,7 @@ const canSubmit = computed(() => {
 
 function onWaterInput() {}
 function onElectricInput() {}
+function onGasInput() {}
 
 // ========== 拍照（可选） ==========
 const showPhotoModal = ref(false)
@@ -502,6 +552,20 @@ function doSubmit(forceConfirm) {
     results.push(db.addMeterReading(reading))
   }
 
+  // 保存气表（选填）
+  if (gasValue.value !== null && gasValue.value >= 0) {
+    const reading = {
+      roomId: selectedRoomId.value,
+      meterType: 'gas',
+      readingValue: gasValue.value,
+      forceConfirm: forceConfirm,
+      photoPath: null,
+      readingDate: new Date().toISOString(),
+      notes: notes.value
+    }
+    results.push(db.addMeterReading(reading))
+  }
+
   // 检查是否有被拒绝的异常
   const rejected = results.find(r => r.isAnomaly && !r.isAnomalyConfirmed)
   if (rejected) {
@@ -530,13 +594,12 @@ function doSubmit(forceConfirm) {
 function clearInputs() {
   waterInput.value = ''
   electricInput.value = ''
+  gasInput.value = ''
   notes.value = ''
   waterPhotoPath.value = ''
   electricPhotoPath.value = ''
-  waterLastReading.value = null
-  waterLastDate.value = null
-  electricLastReading.value = null
-  electricLastDate.value = null
+  gasLastReading.value = null
+  gasLastDate.value = null
   pendingForceConfirmWater = false
   pendingForceConfirmElectric = false
 }
@@ -712,6 +775,10 @@ function clearInputs() {
 
 .meter-section.electric-section {
   border-left: 6rpx solid #FAAD14;
+}
+
+.meter-section.gas-section {
+  border-left: 6rpx solid #52C41A;
 }
 
 .meter-header {
