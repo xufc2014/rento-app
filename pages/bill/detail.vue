@@ -50,6 +50,24 @@
         <text class="detail-value">{{ formatAmount(bill.internetFee) }}</text>
       </view>
 
+      <!-- 卫生费 -->
+      <view class="detail-row" v-if="bill.sanitationFee > 0">
+        <text class="detail-label">卫生费</text>
+        <text class="detail-value">{{ formatAmount(bill.sanitationFee) }}</text>
+      </view>
+
+      <!-- 管理费 -->
+      <view class="detail-row" v-if="bill.managementFee > 0">
+        <text class="detail-label">管理费</text>
+        <text class="detail-value">{{ formatAmount(bill.managementFee) }}</text>
+      </view>
+
+      <!-- 其他费用 -->
+      <view class="detail-row" v-if="bill.otherFee > 0">
+        <text class="detail-label">其他费用</text>
+        <text class="detail-value">{{ formatAmount(bill.otherFee) }}</text>
+      </view>
+
       <!-- 减免 -->
       <view class="detail-row" v-if="bill.deduction > 0">
         <text class="detail-label">减免</text>

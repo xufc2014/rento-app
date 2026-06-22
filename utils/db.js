@@ -28,6 +28,9 @@ const DEFAULT_SETTINGS = {
     '商铺': { waterRate: 8, electricRate: 1 }
   },
   internetFee: 50,               // 元/月
+  sanitationFee: 20,              // 卫生费/月
+  managementFee: 30,              // 管理费/月
+  otherFee: 0,                    // 其他费用/月
   defaultDepositRule: '押二付一',
   billGenerationStartDay: 25,
   billGenerationEndDay: 30,
@@ -476,7 +479,7 @@ class Database {
     if (idx === -1) return { error: '合同不存在' }
 
     // 只允许修改的字段
-    const allowedFields = ['startDate', 'endDate', 'rentAmount', 'depositAmount', 'depositRule', 'extraDeposit', 'extraDepositNote']
+    const allowedFields = ['startDate', 'endDate', 'rentAmount', 'depositAmount', 'depositRule', 'extraDeposit', 'extraDepositNote', 'sanitationFee', 'managementFee', 'otherFee']
     for (const key of allowedFields) {
       if (updates[key] !== undefined) {
         contracts[idx][key] = updates[key]
@@ -517,6 +520,10 @@ class Database {
       rentAmount: contract.rentAmount || room.baseRent,
       extraDeposit: contract.extraDeposit || 0,
       extraDepositNote: contract.extraDepositNote || '',
+      internetFee: contract.internetFee || 0,
+      sanitationFee: contract.sanitationFee || 0,
+      managementFee: contract.managementFee || 0,
+      otherFee: contract.otherFee || 0,
       status: '活跃',
       parentId: null,
       createdAt: new Date().toISOString()
@@ -562,6 +569,9 @@ class Database {
       rentAmount: newContractData.rentAmount || oldContract.rentAmount,
       extraDeposit: newContractData.extraDeposit != null ? newContractData.extraDeposit : (oldContract.extraDeposit || 0),
       extraDepositNote: newContractData.extraDepositNote != null ? newContractData.extraDepositNote : (oldContract.extraDepositNote || ''),
+      sanitationFee: newContractData.sanitationFee != null ? newContractData.sanitationFee : (oldContract.sanitationFee || 0),
+      managementFee: newContractData.managementFee != null ? newContractData.managementFee : (oldContract.managementFee || 0),
+      otherFee: newContractData.otherFee != null ? newContractData.otherFee : (oldContract.otherFee || 0),
       status: '活跃',
       parentId: contractId,
       createdAt: new Date().toISOString()
@@ -766,10 +776,13 @@ class Database {
 
     const rentAmount = contract.rentAmount
     const internetFee = room.internetFee || settings.internetFee
+    const sanitationFee = contract.sanitationFee || settings.sanitationFee || 0
+    const managementFee = contract.managementFee || settings.managementFee || 0
+    const otherFee = contract.otherFee || settings.otherFee || 0
     const deduction = options.deduction || 0
     const deductionReason = options.deductionReason || ''
 
-    const totalAmount = rentAmount + waterFee + electricFee + internetFee - deduction
+    const totalAmount = rentAmount + waterFee + electricFee + internetFee + sanitationFee + managementFee + otherFee - deduction
 
     const bill = {
       id: generateId(),
@@ -781,6 +794,9 @@ class Database {
       waterFee: waterFee,
       electricFee: electricFee,
       internetFee: internetFee,
+      sanitationFee: sanitationFee,
+      managementFee: managementFee,
+      otherFee: otherFee,
       deduction: deduction,
       deductionReason: deductionReason,
       totalAmount: totalAmount,

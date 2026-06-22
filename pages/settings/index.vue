@@ -45,7 +45,7 @@
 
     <!-- 其他费用 -->
     <view class="card">
-      <view class="card-title">其他费用</view>
+      <view class="card-title">费用配置</view>
 
       <view class="form-group">
         <text class="form-label">网费</text>
@@ -58,9 +58,52 @@
             placeholder="元/月"
           />
         </view>
+        <text class="form-hint">每月网费，签合同时可调整</text>
       </view>
 
-      <view class="btn-big btn-primary" @click="saveOtherFees">保存其他费用</view>
+      <view class="form-group">
+        <text class="form-label">卫生费</text>
+        <view class="input-wrap">
+          <text class="input-prefix">¥</text>
+          <input
+            class="form-input"
+            type="digit"
+            v-model="form.sanitationFee"
+            placeholder="元/月"
+          />
+        </view>
+        <text class="form-hint">每月卫生费，签合同时可调整</text>
+      </view>
+
+      <view class="form-group">
+        <text class="form-label">管理费</text>
+        <view class="input-wrap">
+          <text class="input-prefix">¥</text>
+          <input
+            class="form-input"
+            type="digit"
+            v-model="form.managementFee"
+            placeholder="元/月"
+          />
+        </view>
+        <text class="form-hint">每月管理费，签合同时可调整</text>
+      </view>
+
+      <view class="form-group">
+        <text class="form-label">其他费用</text>
+        <view class="input-wrap">
+          <text class="input-prefix">¥</text>
+          <input
+            class="form-input"
+            type="digit"
+            v-model="form.otherFee"
+            placeholder="元/月"
+          />
+        </view>
+        <text class="form-hint">其他每月固定费用，签合同时可调整</text>
+      </view>
+
+      <view class="btn-big btn-primary" @click="saveOtherFees">保存费用配置</view>
     </view>
 
     <!-- 押金规则 -->
@@ -261,6 +304,9 @@ const typeRates = reactive({
 
 const form = reactive({
   internetFee: '',
+  sanitationFee: '',
+  managementFee: '',
+  otherFee: '',
   defaultDepositRule: '押二付一',
   billGenerationStartDay: '',
   billGenerationEndDay: '',
@@ -291,6 +337,9 @@ function loadSettings() {
     }
   }
   form.internetFee = String(settings.internetFee)
+  form.sanitationFee = String(settings.sanitationFee ?? '')
+  form.managementFee = String(settings.managementFee ?? '')
+  form.otherFee = String(settings.otherFee ?? '')
   form.defaultDepositRule = settings.defaultDepositRule
   form.billGenerationStartDay = String(settings.billGenerationStartDay)
   form.billGenerationEndDay = String(settings.billGenerationEndDay)
@@ -319,9 +368,12 @@ function saveTypeRates() {
 
 function saveOtherFees() {
   db.updateSettings({
-    internetFee: parseFloat(form.internetFee) || 0
+    internetFee: parseFloat(form.internetFee) || 0,
+    sanitationFee: parseFloat(form.sanitationFee) || 0,
+    managementFee: parseFloat(form.managementFee) || 0,
+    otherFee: parseFloat(form.otherFee) || 0
   })
-  uni.showToast({ title: '其他费用已保存', icon: 'success' })
+  uni.showToast({ title: '费用配置已保存', icon: 'success' })
 }
 
 function saveDepositRule() {

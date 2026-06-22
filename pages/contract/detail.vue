@@ -48,6 +48,26 @@
               <text class="info-label">总押金</text>
               <text class="info-value amount-red">{{ formatAmount(contract.depositAmount + contract.extraDeposit) }}</text>
             </view>
+            <view class="info-item" v-if="contract.internetFee > 0">
+              <text class="info-label">网费</text>
+              <text class="info-value">{{ formatAmount(contract.internetFee) }}/月</text>
+            </view>
+            <view class="info-item" v-if="contract.sanitationFee > 0">
+              <text class="info-label">卫生费</text>
+              <text class="info-value">{{ formatAmount(contract.sanitationFee) }}/月</text>
+            </view>
+            <view class="info-item" v-if="contract.managementFee > 0">
+              <text class="info-label">管理费</text>
+              <text class="info-value">{{ formatAmount(contract.managementFee) }}/月</text>
+            </view>
+            <view class="info-item" v-if="contract.otherFee > 0">
+              <text class="info-label">其他费用</text>
+              <text class="info-value">{{ formatAmount(contract.otherFee) }}/月</text>
+            </view>
+            <view class="info-item">
+              <text class="info-label">月合计</text>
+              <text class="info-value amount-red">{{ formatAmount(contract.rentAmount + (contract.internetFee || 0) + (contract.sanitationFee || 0) + (contract.managementFee || 0) + (contract.otherFee || 0)) }}</text>
+            </view>
           </template>
 
           <!-- 编辑模式 -->
@@ -97,6 +117,22 @@
             <view class="edit-field">
               <text class="edit-label">总押金</text>
               <text class="deposit-display deposit-total">{{ formatAmount(calcEditTotalDeposit) }}</text>
+            </view>
+            <view class="edit-field">
+              <text class="edit-label">网费</text>
+              <input class="edit-input" type="digit" v-model="editForm.internetFee" placeholder="0" />
+            </view>
+            <view class="edit-field">
+              <text class="edit-label">卫生费</text>
+              <input class="edit-input" type="digit" v-model="editForm.sanitationFee" placeholder="0" />
+            </view>
+            <view class="edit-field">
+              <text class="edit-label">管理费</text>
+              <input class="edit-input" type="digit" v-model="editForm.managementFee" placeholder="0" />
+            </view>
+            <view class="edit-field">
+              <text class="edit-label">其他费用</text>
+              <input class="edit-input" type="digit" v-model="editForm.otherFee" placeholder="0" />
             </view>
           </template>
         </view>
@@ -177,6 +213,27 @@
         <view class="form-label" style="margin-top: 12px;">总押金</view>
         <text class="deposit-display deposit-total">{{ formatAmount(calcRenewTotalDeposit) }}</text>
 
+        <view class="form-label" style="margin-top: 16px;">每月固定费用</view>
+
+        <view class="fee-row">
+          <text class="fee-label">网费</text>
+          <input class="input-big fee-input-inline" type="digit" v-model="renewInternetFee" placeholder="0" />
+        </view>
+        <view class="fee-row">
+          <text class="fee-label">卫生费</text>
+          <input class="input-big fee-input-inline" type="digit" v-model="renewSanitationFee" placeholder="0" />
+        </view>
+        <view class="fee-row">
+          <text class="fee-label">管理费</text>
+          <input class="input-big fee-input-inline" type="digit" v-model="renewManagementFee" placeholder="0" />
+        </view>
+        <view class="fee-row">
+          <text class="fee-label">其他费用</text>
+          <input class="input-big fee-input-inline" type="digit" v-model="renewOtherFee" placeholder="0" />
+        </view>
+
+        <text class="fee-total-hint">月合计：{{ formatAmount(calcRenewMonthlyTotal) }}</text>
+
         <view class="btn-big btn-primary" style="margin-top: 20px;" @click="doRenew">确认续签</view>
         <view class="btn-big btn-secondary" style="margin-top: 10px;" @click="showRenewPanel = false">取消</view>
       </view>
@@ -204,7 +261,11 @@ const editForm = reactive({
   rentAmount: '',
   depositRule: '',
   extraDeposit: '',
-  extraDepositNote: ''
+  extraDepositNote: '',
+  internetFee: '',
+  sanitationFee: '',
+  managementFee: '',
+  otherFee: ''
 })
 
 const depositRules = ['押一付一', '押二付一', '押一付三']
@@ -217,6 +278,10 @@ const renewRentAmount = ref('')
 const renewDepositRule = ref('')
 const renewExtraDeposit = ref('')
 const renewExtraDepositNote = ref('')
+const renewInternetFee = ref('')
+const renewSanitationFee = ref('')
+const renewManagementFee = ref('')
+const renewOtherFee = ref('')
 
 // 续签押金计算
 const calcRenewBaseDeposit = computed(() => {
@@ -229,6 +294,14 @@ const calcRenewBaseDeposit = computed(() => {
 
 const calcRenewTotalDeposit = computed(() => {
   return calcRenewBaseDeposit.value + (Number(renewExtraDeposit.value) || 0)
+})
+
+const calcRenewMonthlyTotal = computed(() => {
+  return (Number(renewRentAmount.value) || 0) +
+    (Number(renewInternetFee.value) || 0) +
+    (Number(renewSanitationFee.value) || 0) +
+    (Number(renewManagementFee.value) || 0) +
+    (Number(renewOtherFee.value) || 0)
 })
 
 // 编辑模式押金计算
@@ -304,6 +377,10 @@ function loadContract() {
   renewDepositRule.value = c.depositRule
   renewExtraDeposit.value = c.extraDeposit ? String(c.extraDeposit) : ''
   renewExtraDepositNote.value = c.extraDepositNote || ''
+  renewInternetFee.value = c.internetFee ? String(c.internetFee) : ''
+  renewSanitationFee.value = c.sanitationFee ? String(c.sanitationFee) : ''
+  renewManagementFee.value = c.managementFee ? String(c.managementFee) : ''
+  renewOtherFee.value = c.otherFee ? String(c.otherFee) : ''
 }
 
 function startEdit() {
@@ -314,6 +391,10 @@ function startEdit() {
   editForm.depositRule = c.depositRule
   editForm.extraDeposit = c.extraDeposit ? String(c.extraDeposit) : ''
   editForm.extraDepositNote = c.extraDepositNote || ''
+  editForm.internetFee = c.internetFee ? String(c.internetFee) : ''
+  editForm.sanitationFee = c.sanitationFee ? String(c.sanitationFee) : ''
+  editForm.managementFee = c.managementFee ? String(c.managementFee) : ''
+  editForm.otherFee = c.otherFee ? String(c.otherFee) : ''
   isEditing.value = true
 }
 
@@ -338,7 +419,11 @@ function saveEdit() {
     depositAmount: calcEditBaseDeposit.value,
     depositRule: editForm.depositRule,
     extraDeposit: Number(editForm.extraDeposit) || 0,
-    extraDepositNote: editForm.extraDepositNote
+    extraDepositNote: editForm.extraDepositNote,
+    internetFee: Number(editForm.internetFee) || 0,
+    sanitationFee: Number(editForm.sanitationFee) || 0,
+    managementFee: Number(editForm.managementFee) || 0,
+    otherFee: Number(editForm.otherFee) || 0
   })
 
   if (result.error) {
@@ -380,7 +465,10 @@ function doRenew() {
     depositRule: renewDepositRule.value,
     depositAmount: calcRenewBaseDeposit.value,
     extraDeposit: Number(renewExtraDeposit.value) || 0,
-    extraDepositNote: renewExtraDepositNote.value
+    extraDepositNote: renewExtraDepositNote.value,
+    sanitationFee: Number(renewSanitationFee.value) || 0,
+    managementFee: Number(renewManagementFee.value) || 0,
+    otherFee: Number(renewOtherFee.value) || 0
   })
 
   if (result.error) {
@@ -662,5 +750,33 @@ function goCheckout() {
   color: #333333;
   margin-bottom: 16px;
   text-align: center;
+}
+
+.fee-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.fee-label {
+  font-size: 15px;
+  color: #666;
+  font-weight: 600;
+  min-width: 70px;
+  flex-shrink: 0;
+}
+
+.fee-input-inline {
+  flex: 1;
+  margin-left: 0;
+}
+
+.fee-total-hint {
+  font-size: 15px;
+  color: #007AFF;
+  font-weight: 700;
+  text-align: right;
+  display: block;
+  margin-top: 4px;
 }
 </style>

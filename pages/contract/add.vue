@@ -113,6 +113,39 @@
       <view class="form-label" style="margin-top: 16px;">月租金</view>
       <input class="input-big" type="digit" v-model="rentAmount" placeholder="月租金" />
 
+      <view class="form-label" style="margin-top: 16px;">每月固定费用（来自设置默认值，可调整）</view>
+
+      <view class="fee-row">
+        <text class="fee-label">网费</text>
+        <view class="fee-input-wrap">
+          <text class="fee-prefix">¥</text>
+          <input class="fee-input" type="digit" v-model="internetFee" placeholder="0" />
+        </view>
+      </view>
+      <view class="fee-row">
+        <text class="fee-label">卫生费</text>
+        <view class="fee-input-wrap">
+          <text class="fee-prefix">¥</text>
+          <input class="fee-input" type="digit" v-model="sanitationFee" placeholder="0" />
+        </view>
+      </view>
+      <view class="fee-row">
+        <text class="fee-label">管理费</text>
+        <view class="fee-input-wrap">
+          <text class="fee-prefix">¥</text>
+          <input class="fee-input" type="digit" v-model="managementFee" placeholder="0" />
+        </view>
+      </view>
+      <view class="fee-row">
+        <text class="fee-label">其他费用</text>
+        <view class="fee-input-wrap">
+          <text class="fee-prefix">¥</text>
+          <input class="fee-input" type="digit" v-model="otherFee" placeholder="0" />
+        </view>
+      </view>
+
+      <text class="fee-total-hint">月合计：{{ formatAmount(calcMonthlyTotal) }}</text>
+
       <view class="form-label" style="margin-top: 12px;">基础押金（自动计算）</view>
       <text class="deposit-display">{{ formatAmount(calcBaseDeposit) }}</text>
 
@@ -178,6 +211,29 @@
         <text class="confirm-value amount-red">{{ formatAmount(calcTotalDeposit) }}</text>
       </view>
 
+      <!-- 每月固定费用确认 -->
+      <view class="confirm-section-title">每月固定费用</view>
+      <view class="confirm-row" v-if="internetFeeNum > 0">
+        <text class="confirm-label">网费</text>
+        <text class="confirm-value">{{ formatAmount(internetFeeNum) }}</text>
+      </view>
+      <view class="confirm-row" v-if="sanitationFeeNum > 0">
+        <text class="confirm-label">卫生费</text>
+        <text class="confirm-value">{{ formatAmount(sanitationFeeNum) }}</text>
+      </view>
+      <view class="confirm-row" v-if="managementFeeNum > 0">
+        <text class="confirm-label">管理费</text>
+        <text class="confirm-value">{{ formatAmount(managementFeeNum) }}</text>
+      </view>
+      <view class="confirm-row" v-if="otherFeeNum > 0">
+        <text class="confirm-label">其他费用</text>
+        <text class="confirm-value">{{ formatAmount(otherFeeNum) }}</text>
+      </view>
+      <view class="confirm-row">
+        <text class="confirm-label">月合计</text>
+        <text class="confirm-value amount-red">{{ formatAmount(calcMonthlyTotal) }}</text>
+      </view>
+
       <view class="btn-big btn-success" style="margin-top: 24px;" @click="submitContract">确认签订合同</view>
       <view class="btn-big btn-secondary" style="margin-top: 12px;" @click="prevStep">上一步</view>
     </view>
@@ -204,6 +260,10 @@ const depositRule = ref('押二付一')
 const rentAmount = ref('')
 const extraDeposit = ref('')
 const extraDepositNote = ref('')
+const internetFee = ref('')
+const sanitationFee = ref('')
+const managementFee = ref('')
+const otherFee = ref('')
 
 const depositRules = ['押一付一', '押二付一', '押一付三']
 
@@ -231,6 +291,14 @@ const calcBaseDeposit = computed(() => {
 })
 
 const extraDepositNum = computed(() => Number(extraDeposit.value) || 0)
+const internetFeeNum = computed(() => Number(internetFee.value) || 0)
+const sanitationFeeNum = computed(() => Number(sanitationFee.value) || 0)
+const managementFeeNum = computed(() => Number(managementFee.value) || 0)
+const otherFeeNum = computed(() => Number(otherFee.value) || 0)
+
+const calcMonthlyTotal = computed(() => {
+  return (Number(rentAmount.value) || 0) + internetFeeNum.value + sanitationFeeNum.value + managementFeeNum.value + otherFeeNum.value
+})
 
 const calcTotalDeposit = computed(() => {
   return calcBaseDeposit.value + extraDepositNum.value
@@ -266,6 +334,12 @@ onLoad((options) => {
       roomExtraDepositNote.value = room.extraDepositNote || ''
       extraDeposit.value = room.extraDeposit ? String(room.extraDeposit) : ''
       extraDepositNote.value = room.extraDepositNote || ''
+      // 从设置读取默认费用
+      const settings = db.getSettings()
+      internetFee.value = settings.internetFee ? String(settings.internetFee) : ''
+      sanitationFee.value = settings.sanitationFee ? String(settings.sanitationFee) : ''
+      managementFee.value = settings.managementFee ? String(settings.managementFee) : ''
+      otherFee.value = settings.otherFee ? String(settings.otherFee) : ''
     }
     // 如果指定了roomId，直接跳到步骤1
     currentStep.value = 1
@@ -296,6 +370,12 @@ function selectRoom(id) {
     roomExtraDepositNote.value = room.extraDepositNote || ''
     extraDeposit.value = room.extraDeposit ? String(room.extraDeposit) : ''
     extraDepositNote.value = room.extraDepositNote || ''
+    // 从设置读取默认费用
+    const settings = db.getSettings()
+    internetFee.value = settings.internetFee ? String(settings.internetFee) : ''
+    sanitationFee.value = settings.sanitationFee ? String(settings.sanitationFee) : ''
+    managementFee.value = settings.managementFee ? String(settings.managementFee) : ''
+    otherFee.value = settings.otherFee ? String(settings.otherFee) : ''
   }
 }
 
@@ -369,7 +449,10 @@ function submitContract() {
     depositRule: depositRule.value,
     rentAmount: Number(rentAmount.value) || 0,
     extraDeposit: extraDepositNum.value,
-    extraDepositNote: extraDepositNote.value
+    extraDepositNote: extraDepositNote.value,
+    sanitationFee: sanitationFeeNum.value,
+    managementFee: managementFeeNum.value,
+    otherFee: otherFeeNum.value
   })
 
   if (result.error) {
@@ -713,5 +796,64 @@ function submitContract() {
 
 .amount-red {
   color: #FF3B30;
+}
+
+.fee-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+}
+
+.fee-label {
+  font-size: 15px;
+  color: #666;
+  font-weight: 600;
+  min-width: 70px;
+}
+
+.fee-input-wrap {
+  display: flex;
+  align-items: center;
+  background-color: #f8f8f8;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 0 10px;
+  height: 40px;
+  flex: 1;
+  margin-left: 12px;
+}
+
+.fee-prefix {
+  font-size: 16px;
+  font-weight: 700;
+  color: #333;
+  margin-right: 6px;
+}
+
+.fee-input {
+  flex: 1;
+  font-size: 16px;
+  height: 100%;
+  background: transparent;
+}
+
+.fee-total-hint {
+  font-size: 15px;
+  color: #007AFF;
+  font-weight: 700;
+  text-align: right;
+  margin-top: 8px;
+  display: block;
+}
+
+.confirm-section-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #333;
+  margin-top: 16px;
+  margin-bottom: 4px;
+  padding-top: 12px;
+  border-top: 1px solid #f0f0f0;
 }
 </style>
