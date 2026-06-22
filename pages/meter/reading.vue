@@ -1,7 +1,27 @@
 <template>
   <view class="container">
-    <!-- 楼栋楼层选择（持久化，提交后不重置） -->
-    <view class="location-card">
+    <!-- 步骤1：先选抄表月份 -->
+    <view class="month-pick-card" v-if="!usageMonthConfirmed">
+      <view class="month-pick-title">📋 选择抄表月份</view>
+      <view class="month-pick-desc">
+        这是<strong>用量发生的月份</strong>，不是今天的日期。
+        <br/>比如7月1号去抄6月的表，就选6月。
+      </view>
+      <picker mode="date" fields="month" :value="usageMonthPick" @change="onUsageMonthPick">
+        <view class="month-pick-value">{{ usageMonthCN }}</view>
+      </picker>
+      <view class="btn-big btn-primary" style="margin-top: 20px;" @click="confirmUsageMonth">
+        确认，开始抄表
+      </view>
+    </view>
+
+    <!-- 步骤2：楼栋楼层选择（确认月份后才显示） -->
+    <view class="location-card" v-if="usageMonthConfirmed">
+      <view class="month-badge-bar">
+        <view class="month-badge">抄表月份：{{ usageMonthCN }}</view>
+        <view class="month-change" @click="changeUsageMonth">修改月份</view>
+      </view>
+
       <view class="select-row" v-if="buildings.length > 0">
         <view class="select-label">楼栋</view>
         <scroll-view scroll-x class="option-scroll">
@@ -19,12 +39,12 @@
         </scroll-view>
       </view>
 
-      <view class="select-row" v-if="selectedBuildingId && floors.length > 0">
-        <view class="select-label">楼层</view>
+      <view class="select-row" v-if="selectedBuildingId && occupiedFloors.length > 0">
+        <view class="select-label">楼层（仅已入住）</view>
         <scroll-view scroll-x class="option-scroll">
           <view class="option-list">
             <view
-              v-for="f in floors"
+              v-for="f in occupiedFloors"
               :key="f"
               class="option-btn"
               :class="{ active: selectedFloor === f, done: isFloorDone(f) }"
@@ -41,16 +61,16 @@
       </view>
     </view>
 
-    <!-- 房间列表（选中楼栋+楼层后显示） -->
-    <view v-if="selectedBuildingId && selectedFloor !== ''" class="room-list">
+    <!-- 房间列表（选中楼栋+楼层后显示，仅已入住） -->
+    <view v-if="usageMonthConfirmed && selectedBuildingId && selectedFloor !== ''" class="room-list">
       <view class="room-list-header">
-        <text class="room-list-title">{{ currentBuildingName }} {{ selectedFloor }}F</text>
-        <text class="room-list-count">共 {{ roomsOnFloor.length }} 间</text>
+        <text class="room-list-title">{{ currentBuildingName }} {{ selectedFloor }}F（已入住）</text>
+        <text class="room-list-count">{{ occupiedRoomsOnFloor.length }} 间</text>
       </view>
 
-      <!-- 逐间录入 -->
+      <!-- 逐间录入（仅已入住房间） -->
       <view
-        v-for="room in roomsOnFloor"
+        v-for="room in occupiedRoomsOnFloor"
         :key="room.id"
         class="room-card"
         :class="{ active: selectedRoomId === room.id, saved: savedRoomIds.has(room.id) }"
@@ -59,7 +79,7 @@
         <!-- 房间头部 -->
         <view class="room-header">
           <view class="room-number">{{ room.roomNumber }}</view>
-          <view class="room-type-tag">{{ room.unitType || '民房' }}</view>
+          <view class="room-tenant-name">{{ getTenantName(room) }}</view>
           <view v-if="savedRoomIds.has(room.id)" class="saved-badge">已抄</view>
           <view v-if="selectedRoomId === room.id" class="editing-badge">录入中</view>
         </view>
@@ -185,8 +205,11 @@
         </view>
       </view>
 
-      <view class="empty-tip" v-if="roomsOnFloor.length === 0">
-        该楼层暂无房间
+      <view class="empty-tip" v-if="occupiedRoomsOnFloor.length === 0">
+        该楼层暂无已入住房间
+      </view>
+      <view class="all-done-tip" v-if="occupiedRoomsOnFloor.length > 0 && occupiedRoomsOnFloor.every(r => savedRoomIds.has(r.id))">
+        ✅ 该楼层已入住房间全部抄表完成！
       </view>
     </view>
 
@@ -219,6 +242,46 @@ import db from '@/utils/db.js'
 import { formatDateCN } from '@/utils/date.js'
 import { formatAmount } from '@/utils/calc.js'
 
+// ========== 抄表月份选择 ==========
+const usageMonthPick = ref('')
+const usageMonthConfirmed = ref(false)
+const usageMonthCN = computed(() => {
+  if (!usageMonthPick.value) return '请选择月份'
+  const parts = usageMonthPick.value.split('-')
+  const months = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二']
+  return `${parts[0]}年${months[Number(parts[1]) - 1]}月`
+})
+
+// 初始化默认月份（上月，因为正常25-30号抄的是上月的用量）
+function initUsageMonth() {
+  const now = new Date()
+  // 默认选上个月（抄表通常是抄上月的用量）
+  const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  usageMonthPick.value = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, '0')}`
+}
+
+function onUsageMonthPick(e) {
+  usageMonthPick.value = e.detail.value
+}
+
+function confirmUsageMonth() {
+  if (!usageMonthPick.value) {
+    uni.showToast({ title: '请选择月份', icon: 'none' })
+    return
+  }
+  usageMonthConfirmed.value = true
+  refreshSavedStatus()
+}
+
+function changeUsageMonth() {
+  usageMonthConfirmed.value = false
+  savedRoomIds.value = new Set()
+  selectedBuildingId.value = ''
+  selectedFloor.value = ''
+  selectedRoomId.value = ''
+  clearInputs()
+}
+
 // ========== 数据加载 ==========
 const buildings = ref([])
 const rooms = ref([])
@@ -228,9 +291,10 @@ onMounted(() => {
   buildings.value = db.getBuildings()
   rooms.value = db.getRooms()
   settings.value = db.getSettings()
+  initUsageMonth()
 })
 
-// ========== 楼栋/楼层选择（持久化） ==========
+// ========== 楼栋/楼层选择 ==========
 const selectedBuildingId = ref('')
 const selectedFloor = ref('')
 const selectedRoomId = ref('')
@@ -240,20 +304,22 @@ const currentBuildingName = computed(() => {
   return b ? b.name : ''
 })
 
-const floors = computed(() => {
+// 只取有已入住房间的楼层
+const occupiedFloors = computed(() => {
   if (!selectedBuildingId.value) return []
   const set = new Set(
     rooms.value
-      .filter(r => r.buildingId === selectedBuildingId.value)
+      .filter(r => r.buildingId === selectedBuildingId.value && r.status === '已入住')
       .map(r => r.floor)
   )
   return Array.from(set).sort((a, b) => a - b)
 })
 
-const roomsOnFloor = computed(() => {
+// 当前楼层只显示已入住房间
+const occupiedRoomsOnFloor = computed(() => {
   if (!selectedBuildingId.value || selectedFloor.value === '') return []
   return rooms.value
-    .filter(r => r.buildingId === selectedBuildingId.value && r.floor === selectedFloor.value)
+    .filter(r => r.buildingId === selectedBuildingId.value && r.floor === selectedFloor.value && r.status === '已入住')
     .sort((a, b) => a.roomNumber.localeCompare(b.roomNumber, 'zh-CN'))
 })
 
@@ -268,8 +334,8 @@ function selectFloor(floor) {
   selectedFloor.value = floor
   selectedRoomId.value = ''
   clearInputs()
-  // 自动选中第一个未抄的房间
-  const firstUnsaved = roomsOnFloor.value.find(r => !savedRoomIds.value.has(r.id))
+  // 自动选中第一个未抄的已入住房间
+  const firstUnsaved = occupiedRoomsOnFloor.value.find(r => !savedRoomIds.value.has(r.id))
   if (firstUnsaved) {
     selectedRoomId.value = firstUnsaved.id
   }
@@ -278,6 +344,13 @@ function selectFloor(floor) {
 function selectRoom(id) {
   selectedRoomId.value = id
   loadLastReadings()
+}
+
+// 获取租客名称
+function getTenantName(room) {
+  if (!room.currentTenantId) return ''
+  const t = db.getTenantById(room.currentTenantId)
+  return t ? t.name : ''
 }
 
 // 切换房间时加载上次读数
@@ -291,27 +364,21 @@ const savedRoomIds = ref(new Set())
 function isFloorDone(floor) {
   if (!selectedBuildingId.value) return false
   const floorRooms = rooms.value.filter(
-    r => r.buildingId === selectedBuildingId.value && r.floor === floor
+    r => r.buildingId === selectedBuildingId.value && r.floor === floor && r.status === '已入住'
   )
   return floorRooms.length > 0 && floorRooms.every(r => savedRoomIds.value.has(r.id))
 }
 
-// 页面加载时，统计已有抄表记录的房间
-onMounted(() => {
-  // 从数据库读取当前已有的最新记录，标记已抄
-  refreshSavedStatus()
-})
-
 function refreshSavedStatus() {
   const allReadings = db.getAllMeterReadings ? db.getAllMeterReadings() : []
-  // 获取本次抄表周期内已有记录的房间（简化：当前月份已有水+电记录即标记已抄）
-  const now = new Date()
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  // 按用户选择的抄表月份来判断哪些房间已抄
+  const targetMonth = usageMonthPick.value
   const roomSet = new Set()
   const roomTypeMap = {}
   allReadings.forEach(r => {
+    // 用 readingDate 的月份部分判断（不是 createdAt）
     const readingMonth = r.readingDate ? r.readingDate.substring(0, 7) : ''
-    if (readingMonth === currentMonth) {
+    if (readingMonth === targetMonth) {
       if (!roomTypeMap[r.roomId]) roomTypeMap[r.roomId] = new Set()
       roomTypeMap[r.roomId].add(r.meterType)
     }
@@ -524,6 +591,10 @@ function submitReadings() {
 function doSubmit(forceConfirm) {
   const results = []
 
+  // 构造用量月份的日期：用户选择的月份 + 当天日期
+  // 比如7月1号抄6月的表 → readingDate = 2026-06-01T...（算6月用量）
+  const usageDate = buildUsageDate(usageMonthPick.value)
+
   // 保存水表
   if (waterValue.value !== null && waterValue.value >= 0) {
     const reading = {
@@ -532,7 +603,8 @@ function doSubmit(forceConfirm) {
       readingValue: waterValue.value,
       forceConfirm: forceConfirm,
       photoPath: waterPhotoPath.value,
-      readingDate: new Date().toISOString(),
+      readingDate: usageDate,   // 用量月份日期，不是当天
+      recordedAt: new Date().toISOString(),  // 实际录入时间
       notes: notes.value
     }
     results.push(db.addMeterReading(reading))
@@ -546,7 +618,8 @@ function doSubmit(forceConfirm) {
       readingValue: electricValue.value,
       forceConfirm: forceConfirm,
       photoPath: electricPhotoPath.value,
-      readingDate: new Date().toISOString(),
+      readingDate: usageDate,
+      recordedAt: new Date().toISOString(),
       notes: notes.value
     }
     results.push(db.addMeterReading(reading))
@@ -560,7 +633,8 @@ function doSubmit(forceConfirm) {
       readingValue: gasValue.value,
       forceConfirm: forceConfirm,
       photoPath: null,
-      readingDate: new Date().toISOString(),
+      readingDate: usageDate,
+      recordedAt: new Date().toISOString(),
       notes: notes.value
     }
     results.push(db.addMeterReading(reading))
@@ -576,19 +650,32 @@ function doSubmit(forceConfirm) {
   // 标记已抄
   savedRoomIds.value.add(selectedRoomId.value)
 
-  uni.showToast({ title: '抄表成功', icon: 'success' })
+  uni.showToast({ title: `${usageMonthCN.value}抄表成功`, icon: 'success' })
 
   // 清空输入，自动跳到下一个未抄房间
   setTimeout(() => {
     const currentRoomId = selectedRoomId.value
     clearInputs()
-    // 查找下一个未抄房间
-    const nextRoom = roomsOnFloor.value.find(r => !savedRoomIds.value.has(r.id) && r.id !== currentRoomId)
+    const nextRoom = occupiedRoomsOnFloor.value.find(r => !savedRoomIds.value.has(r.id) && r.id !== currentRoomId)
     if (nextRoom) {
       selectedRoomId.value = nextRoom.id
       loadLastReadings()
     }
   }, 800)
+}
+
+// 构造用量月份日期：用用户选择的月份 + 当天的日数
+// 比如 2026-06 + 7月1号录入 → 2026-06-01T12:00:00
+// 如果当天日期超过该月最大天数，则用该月最后一天
+function buildUsageDate(monthStr) {
+  const now = new Date()
+  const [y, m] = monthStr.split('-').map(Number)
+  const day = now.getDate()
+  // 该月最大天数
+  const maxDay = new Date(y, m, 0).getDate()
+  const safeDay = Math.min(day, maxDay)
+  const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}.000Z`
+  return dateStr
 }
 
 function clearInputs() {
@@ -610,6 +697,67 @@ function clearInputs() {
   padding: 20rpx;
   background-color: #F5F5F5;
   min-height: 100vh;
+}
+
+/* ========== 月份选择卡片 ========== */
+.month-pick-card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 32rpx 30rpx;
+  margin: 20rpx;
+}
+
+.month-pick-title {
+  font-size: 34rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 16rpx;
+}
+
+.month-pick-desc {
+  font-size: 26rpx;
+  color: #666;
+  line-height: 1.6;
+  margin-bottom: 20rpx;
+  padding: 16rpx;
+  background: #FFF8E1;
+  border-radius: 10rpx;
+  border-left: 6rpx solid #FAAD14;
+}
+
+.month-pick-value {
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #007AFF;
+  text-align: center;
+  padding: 20rpx;
+  background: #E6F7FF;
+  border-radius: 12rpx;
+}
+
+/* ========== 月份徽章 ========== */
+.month-badge-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12rpx 16rpx;
+  background: #E6F7FF;
+  border-radius: 10rpx;
+  margin-bottom: 20rpx;
+}
+
+.month-badge {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #007AFF;
+}
+
+.month-change {
+  font-size: 24rpx;
+  color: #FF6B00;
+  padding: 6rpx 16rpx;
+  border: 2rpx solid #FF6B00;
+  border-radius: 6rpx;
 }
 
 /* ========== 楼栋楼层选择 ========== */
@@ -729,12 +877,10 @@ function clearInputs() {
   color: #333;
 }
 
-.room-type-tag {
-  font-size: 22rpx;
-  padding: 4rpx 14rpx;
-  border-radius: 6rpx;
-  background: #F0F0F0;
-  color: #666;
+.room-tenant-name {
+  font-size: 24rpx;
+  color: #007AFF;
+  margin-left: 10rpx;
 }
 
 .saved-badge {
@@ -1046,5 +1192,13 @@ function clearInputs() {
   color: #999;
   font-size: 28rpx;
   padding: 40rpx 0;
+}
+
+.all-done-tip {
+  text-align: center;
+  color: #4CAF50;
+  font-size: 28rpx;
+  font-weight: bold;
+  padding: 30rpx 0;
 }
 </style>

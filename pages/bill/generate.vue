@@ -87,6 +87,11 @@
             <text class="bill-total">¥{{ formatAmt(r.totalAmount) }}</text>
           </view>
 
+          <view class="bill-usage-month" v-if="r.usageMonth">
+            <text class="usage-month-label">水电用量月份：</text>
+            <text class="usage-month-val">{{ r.usageMonth }}</text>
+          </view>
+
           <view class="bill-fees-grid">
             <view class="fee-item">
               <text class="fee-label">房租</text>
@@ -500,6 +505,21 @@ if (buildings.value.length > 0) {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 10px;
+}
+
+.bill-usage-month {
+  font-size: 12px;
+  color: #999999;
+  margin-bottom: 8px;
+}
+
+.usage-month-label {
+  color: #888888;
+}
+
+.usage-month-val {
+  color: #007AFF;
+  font-weight: 600;
 }
 
 .bill-room-name {

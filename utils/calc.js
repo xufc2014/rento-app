@@ -58,7 +58,8 @@ export function calcUtilityFee(roomId, meterType, month, db) {
 
 /**
  * 计算月度账单总额
- * 公式: 房租 + 水费 + 电费 + 燃气费 + 网费 + 卫生费 + 管理费 + 其他费用 - 减免 = 应付总额
+ * 公式: 房租(本月) + 水费(上月) + 电费(上月) + 燃气费(上月) + 网费(本月) + 卫生费(本月) + 管理费(本月) + 其他费用(本月) - 减免 = 应付总额
+ * 账单月份 = 收费月，水电用量 = 上月
  */
 export function calcBillTotal(roomId, month, db, deduction = 0) {
   const room = db.getRoomById(roomId)
@@ -67,16 +68,26 @@ export function calcBillTotal(roomId, month, db, deduction = 0) {
 
   if (!room || !contract) return 0
 
+  // 用量月份 = 账单月份 - 1
+  const usageMonth = getPrevMonth(month)
+
   const rentAmount = contract.rentAmount
-  const waterFee = calcUtilityFee(roomId, 'water', month, db)
-  const electricFee = calcUtilityFee(roomId, 'electric', month, db)
-  const gasFee = calcUtilityFee(roomId, 'gas', month, db)
+  const waterFee = calcUtilityFee(roomId, 'water', usageMonth, db)
+  const electricFee = calcUtilityFee(roomId, 'electric', usageMonth, db)
+  const gasFee = calcUtilityFee(roomId, 'gas', usageMonth, db)
   const internetFee = room.internetFee || settings.internetFee
   const sanitationFee = contract.sanitationFee || settings.sanitationFee || 0
   const managementFee = contract.managementFee || settings.managementFee || 0
   const otherFee = contract.otherFee || settings.otherFee || 0
 
   return Math.round((rentAmount + waterFee + electricFee + gasFee + internetFee + sanitationFee + managementFee + otherFee - deduction) * 100) / 100
+}
+
+// 获取上一个月份
+function getPrevMonth(monthStr) {
+  const [y, m] = monthStr.split('-').map(Number)
+  if (m === 1) return `${y - 1}-12`
+  return `${y}-${String(m - 1).padStart(2, '0')}`
 }
 
 /**

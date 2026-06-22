@@ -7,6 +7,13 @@
 import { generateId } from './uuid.js'
 import { calcUtilityFee } from './calc.js'
 
+// 工具函数：获取上一个月份（如 '2026-07' → '2026-06'）
+function getPrevMonth(monthStr) {
+  const [y, m] = monthStr.split('-').map(Number)
+  if (m === 1) return `${y - 1}-12`
+  return `${y}-${String(m - 1).padStart(2, '0')}`
+}
+
 // 存储键名定义
 const KEYS = {
   SETTINGS: 'rento_settings',
@@ -837,6 +844,8 @@ class Database {
       isAnomalyConfirmed: reading.forceConfirm || false,
       photoPath: reading.photoPath || null,
       readingDate: reading.readingDate || new Date().toISOString(),
+      recordedAt: reading.recordedAt || new Date().toISOString(),  // 实际录入时间
+      usageMonth: (reading.readingDate || new Date().toISOString()).substring(0, 7),  // 用量月份
       notes: reading.notes || '',
       createdAt: new Date().toISOString()
     }
@@ -882,10 +891,13 @@ class Database {
 
     const settings = this.getSettings()
 
-    // 计算水电燃气费
-    const waterFee = calcUtilityFee(roomId, 'water', month, this)
-    const electricFee = calcUtilityFee(roomId, 'electric', month, this)
-    const gasFee = calcUtilityFee(roomId, 'gas', month, this)
+    // 计算水电燃气费：账单月份是收费月，用量是上月的
+    // 例如：7月账单 = 7月固定费用 + 6月水电用量
+    const usageMonth = getPrevMonth(month)
+
+    const waterFee = calcUtilityFee(roomId, 'water', usageMonth, this)
+    const electricFee = calcUtilityFee(roomId, 'electric', usageMonth, this)
+    const gasFee = calcUtilityFee(roomId, 'gas', usageMonth, this)
 
     const rentAmount = contract.rentAmount
     const internetFee = room.internetFee || settings.internetFee
@@ -903,6 +915,7 @@ class Database {
       contractId: contract.id,
       tenantId: contract.tenantId,
       month: month,
+      usageMonth: usageMonth,     // 用量月份（水电费对应的月份）
       rentAmount: rentAmount,
       waterFee: waterFee,
       electricFee: electricFee,
