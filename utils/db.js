@@ -572,7 +572,7 @@ class Database {
     this.logOperation('签订合同', 'contract', newContract.id,
       `${room.floor}-${room.roomNumber} 租客:${contract.tenantId}`)
     return newContract
-  },
+  }
 
   /**
    * 保存初始读数为抄表记录

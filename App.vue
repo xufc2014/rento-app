@@ -1,8 +1,9 @@
 <script>
+import db from './utils/db.js'
+
 export default {
   onLaunch() {
     // 初始化数据库 - 确保默认数据存在
-    const db = require('./utils/db.js').default
     db.initDefaults()
   },
   onShow() {
