@@ -181,32 +181,61 @@ function saveAsCSV_H5(content, fileName) {
  * APP 模式：保存到本地文件系统
  */
 function saveAsCSV_App(content, fileName) {
-  // #ifdef APP-plus
-  plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, fs => {
-    fs.getRoot(root => {
-      const fullPath = root.fullPath + '/' + fileName
-      root.getFile(fileName, { create: true }, fileEntry => {
-        fileEntry.createWriter(writer => {
-          writer.write(content)
-          writer.onwrite = () => {
-            uni.showToast({ title: `已保存至: ${fullPath}`, icon: 'none', duration: 3000 })
-          }
-          writer.onerror = (e) => {
-            console.error('Write error:', e)
-            uni.showToast({ title: '保存失败', icon: 'none' })
-          }
-        })
-      }, e => {
-        console.error('GetFile error:', e)
-        uni.showToast({ title: '创建文件失败', icon: 'none' })
+  // #ifdef APP-PLUS
+  // Android 10+ 优先用 PUBLIC_DOWNLOADS（无需存储权限）
+  plus.io.requestFileSystem(plus.io.PUBLIC_DOWNLOADS, fs => {
+    fs.root.getFile(fileName, { create: true }, fileEntry => {
+      fileEntry.createWriter(writer => {
+        // 重要：先注册回调，再执行 write（避免异步竞态）
+        writer.onwrite = () => {
+          const absPath = plus.io.convertLocalFileSystemURL(fileEntry.fullPath)
+          uni.showModal({
+            title: '账单已导出',
+            content: `文件：${fileName}\n路径：${absPath}\n\n可在手机"文件管理 → 下载"中找到`,
+            showCancel: false,
+            confirmText: '知道了'
+          })
+        }
+        writer.onerror = (e) => {
+          console.error('CSV write error:', e)
+          // 写入失败，尝试私有目录
+          saveToPrivate(content, fileName)
+        }
+        writer.write(content)
       })
+    }, e => {
+      console.error('CSV getFile error:', e)
+      saveToPrivate(content, fileName)
     })
   }, e => {
-    console.error('FileSystem error:', e)
-    // 兜底：复制到剪贴板
-    fallbackCopy(content)
+    console.error('CSV fileSystem error:', e)
+    // PUBLIC_DOWNLOADS 不可用，降级到私有目录
+    saveToPrivate(content, fileName)
   })
   // #endif
+}
+
+/**
+ * APP 兜底：保存到应用私有文档目录
+ */
+function saveToPrivate(content, fileName) {
+  plus.io.requestFileSystem(plus.io.PRIVATE_DOC, fs => {
+    fs.root.getFile(fileName, { create: true }, fileEntry => {
+      fileEntry.createWriter(writer => {
+        writer.onwrite = () => {
+          const absPath = plus.io.convertLocalFileSystemURL(fileEntry.fullPath)
+          uni.showModal({
+            title: '账单已导出',
+            content: `文件已保存到应用私有目录：\n${absPath}\n\n可连接电脑通过 iTunes/文件共享导出`,
+            showCancel: false,
+            confirmText: '知道了'
+          })
+        }
+        writer.onerror = () => { fallbackCopy(content) }
+        writer.write(content)
+      })
+    }, () => { fallbackCopy(content) })
+  }, () => { fallbackCopy(content) })
 }
 
 function fallbackCopy(content) {

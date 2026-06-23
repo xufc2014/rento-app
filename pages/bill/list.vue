@@ -53,9 +53,9 @@
     <!-- 底部占位 -->
     <view class="bottom-placeholder"></view>
 
-    <!-- 查看账单按钮 -->
+    <!-- 导出账单按钮 -->
     <view class="footer-bar">
-      <view class="btn-big btn-primary" @click="viewCurrentMonth">查看账单</view>
+      <view class="btn-big btn-primary" @click="exportCurrentMonth">导出账单</view>
     </view>
   </view>
 </template>
@@ -66,6 +66,7 @@ import { onShow } from '@dcloudio/uni-app'
 import db from '@/utils/db.js'
 import { getCurrentMonth } from '@/utils/date.js'
 import { formatAmount } from '@/utils/calc.js'
+import { exportBillsToExcel } from '@/utils/export.js'
 
 const currentMonth = ref(getCurrentMonth())
 const billList = ref([])
@@ -146,8 +147,13 @@ function goDetail(billId) {
   uni.navigateTo({ url: `/pages/bill/detail?id=${billId}` })
 }
 
-function viewCurrentMonth() {
-  loadData()
+function exportCurrentMonth() {
+  if (billList.value.length === 0) {
+    uni.showToast({ title: '该月暂无账单可导出', icon: 'none' })
+    return
+  }
+  const buildingName = ''
+  exportBillsToExcel(billList.value, currentMonth.value, buildingName, db)
 }
 </script>
 

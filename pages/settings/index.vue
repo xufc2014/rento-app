@@ -613,21 +613,58 @@ function exportData() {
     // #endif
 
     // #ifdef APP-PLUS
-    // 保存到公共下载目录（手机文件管理器可见）
+    // 保存到公共下载目录 + 系统分享
     plus.io.requestFileSystem(plus.io.PUBLIC_DOWNLOADS, (fs) => {
       fs.root.getFile(fileName, { create: true }, (fileEntry) => {
         fileEntry.createWriter((writer) => {
           writer.onwrite = () => {
             const absPath = plus.io.convertLocalFileSystemURL(fileEntry.fullPath)
+            // 先弹 Modal 展示路径
             uni.showModal({
               title: '备份已保存',
-              content: `文件已保存到下载目录：\n\n${fileName}\n\n可通过手机"文件管理"找到此文件，发送到微信或电脑保存。`,
-              showCancel: false,
-              confirmText: '知道了'
+              content: `文件已保存到下载目录：\n\n${absPath}\n\n是否立即分享备份文件？`,
+              cancelText: '关闭',
+              confirmText: '分享',
+              success: (modalRes) => {
+                if (modalRes.confirm) {
+                  // 调用系统分享面板
+                  plus.share.sendWithSystem({
+                    type: 'file',
+                    filePath: fileEntry.fullPath,
+                    title: fileName
+                  }, () => {}, () => {
+                    uni.showToast({ title: '分享取消', icon: 'none' })
+                  })
+                }
+              }
             })
           }
           writer.onerror = () => {
-            uni.showToast({ title: '导出失败：无法写入文件', icon: 'error' })
+            // PUBLIC_DOWNLOADS 写入失败，降级到私有目录
+            uni.showToast({ title: '切换存储路径中...', icon: 'none', duration: 1000 })
+            plus.io.requestFileSystem(plus.io.PRIVATE_DOC, (pfs) => {
+              pfs.root.getFile(fileName, { create: true }, (pEntry) => {
+                pEntry.createWriter((pWriter) => {
+                  pWriter.onwrite = () => {
+                    const pAbsPath = plus.io.convertLocalFileSystemURL(pEntry.fullPath)
+                    uni.showModal({
+                      title: '备份已保存',
+                      content: `文件已保存到应用私有目录：\n\n${pAbsPath}\n\n可连接电脑通过文件共享导出`,
+                      showCancel: false,
+                      confirmText: '知道了'
+                    })
+                  }
+                  pWriter.onerror = () => {
+                    uni.showToast({ title: '导出失败，请重试', icon: 'error' })
+                  }
+                  pWriter.write(jsonStr)
+                })
+              }, () => {
+                uni.showToast({ title: '导出失败：无法创建文件', icon: 'error' })
+              })
+            }, () => {
+              uni.showToast({ title: '导出失败：无法访问存储', icon: 'error' })
+            })
           }
           writer.write(jsonStr)
         })
@@ -648,14 +685,19 @@ function exportData() {
  */
 function triggerImport() {
   // #ifdef H5
-  // 动态创建 file input 触发文件选择（比模板内隐藏 input 更可靠）
+  // 动态创建 file input 触发文件选择
   const input = document.createElement('input')
   input.type = 'file'
   input.accept = '.json'
-  input.onchange = onFileSelected
+  input.onchange = (e) => {
+    onFileSelected(e)
+    if (input.parentNode) {
+      input.parentNode.removeChild(input)
+    }
+  }
+  input.style.display = 'none'
   document.body.appendChild(input)
-  input.click()
-  document.body.removeChild(input)
+  setTimeout(() => { input.click() }, 100)
   // #endif
 
   // #ifdef MP-WEIXIN
@@ -677,15 +719,161 @@ function triggerImport() {
   // #endif
 
   // #ifdef APP-PLUS
-  // APP 端也用动态创建 file input（WebView 中 uni.chooseFile 不可用）
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = '.json'
-  input.onchange = onFileSelected
-  document.body.appendChild(input)
-  input.click()
-  document.body.removeChild(input)
+  if (typeof uni.chooseFile === 'function') {
+    // uni.chooseFile 可用（HBuilderX 2.9.0+）
+    uni.chooseFile({
+      count: 1,
+      type: 'file',
+      extension: ['.json'],
+      success: (res) => {
+        const filePath = res.tempFilePaths[0]
+        readFileFromPath(filePath)
+      },
+      fail: (err) => {
+        uni.showToast({ title: '选择文件失败', icon: 'error' })
+        console.error('uni.chooseFile fail:', JSON.stringify(err))
+      }
+    })
+  } else {
+    // 降级：使用原生 Android Intent 文件选择器
+    pickFileViaAndroidIntent()
+  }
   // #endif
+}
+
+/**
+ * 通过 plus.io 读取指定路径的文件内容
+ */
+function readFileFromPath(filePath) {
+  plus.io.resolveLocalFileSystemURL(filePath, (entry) => {
+    entry.file((file) => {
+      const reader = new plus.io.FileReader()
+      reader.onloadend = (e) => {
+        handleImportData(e.target.result)
+      }
+      reader.onerror = () => {
+        uni.showToast({ title: '读取文件失败', icon: 'error' })
+      }
+      reader.readAsText(file, 'utf-8')
+    })
+  }, () => {
+    uni.showToast({ title: '无法访问选中文件', icon: 'error' })
+  })
+}
+
+/**
+ * 降级方案：直接用 plus.io 列出已知目录中的 JSON 文件
+ * （Android SAF 文件选择器无法访问 Android/data 私有目录）
+ */
+function pickFileViaAndroidIntent() {
+  const candidates = []
+  const searched = new Set()
+
+  function addFile(name, path, source) {
+    const key = name + '|' + path
+    if (searched.has(key)) return
+    searched.add(key)
+    candidates.push({ name, path, source })
+  }
+
+  function showPicker() {
+    if (candidates.length === 0) {
+      uni.showModal({
+        title: '未找到备份文件',
+        content: '请先执行"导出数据备份"，生成 .json 文件后再导入。',
+        showCancel: false,
+        confirmText: '知道了'
+      })
+      return
+    }
+
+    // 路径可能很长，显示文件名 + 来源
+    const items = candidates.map(f => {
+      const label = f.name
+      return label.length > 40 ? label.slice(0, 37) + '...' : label
+    })
+    uni.showActionSheet({
+      itemList: items,
+      success: (res) => {
+        const file = candidates[res.tapIndex]
+        readFileFromPlusPath(file.path)
+      }
+    })
+  }
+
+  // 扫描 PUBLIC_DOWNLOADS
+  plus.io.requestFileSystem(plus.io.PUBLIC_DOWNLOADS, (fs) => {
+    const reader = fs.root.createReader()
+    reader.readEntries((entries) => {
+      for (let i = 0; i < entries.length; i++) {
+        if (entries[i].isFile && entries[i].name.endsWith('.json')) {
+          addFile(entries[i].name, entries[i].fullPath, '下载目录')
+        }
+      }
+      // 继续扫描 PRIVATE_DOC
+      plus.io.requestFileSystem(plus.io.PRIVATE_DOC, (pfs) => {
+        const pReader = pfs.root.createReader()
+        pReader.readEntries((pEntries) => {
+          for (let i = 0; i < pEntries.length; i++) {
+            if (pEntries[i].isFile && pEntries[i].name.endsWith('.json')) {
+              addFile(pEntries[i].name, pEntries[i].fullPath, '应用目录')
+            }
+          }
+          showPicker()
+        }, () => {
+          showPicker() // PRIVATE_DOC 无权限，直接用已有的
+        })
+      }, () => {
+        showPicker() // PRIVATE_DOC 不可用
+      })
+    }, () => {
+      // PUBLIC_DOWNLOADS 读不到，直接试 PRIVATE_DOC
+      plus.io.requestFileSystem(plus.io.PRIVATE_DOC, (pfs) => {
+        const pReader = pfs.root.createReader()
+        pReader.readEntries((pEntries) => {
+          for (let i = 0; i < pEntries.length; i++) {
+            if (pEntries[i].isFile && pEntries[i].name.endsWith('.json')) {
+              addFile(pEntries[i].name, pEntries[i].fullPath, '应用目录')
+            }
+          }
+          showPicker()
+        }, () => showPicker())
+      }, () => showPicker())
+    })
+  }, () => {
+    // PUBLIC_DOWNLOADS 不可用
+    plus.io.requestFileSystem(plus.io.PRIVATE_DOC, (pfs) => {
+      const pReader = pfs.root.createReader()
+      pReader.readEntries((pEntries) => {
+        for (let i = 0; i < pEntries.length; i++) {
+          if (pEntries[i].isFile && pEntries[i].name.endsWith('.json')) {
+            addFile(pEntries[i].name, pEntries[i].fullPath, '应用目录')
+          }
+        }
+        showPicker()
+      }, () => showPicker())
+    }, () => showPicker())
+  })
+}
+
+/**
+ * 从 plus.io 路径读取 JSON 文件
+ */
+function readFileFromPlusPath(fullPath) {
+  plus.io.resolveLocalFileSystemURL(fullPath, (entry) => {
+    entry.file((file) => {
+      const reader = new plus.io.FileReader()
+      reader.onloadend = (e) => {
+        handleImportData(e.target.result)
+      }
+      reader.onerror = () => {
+        uni.showToast({ title: '读取文件失败', icon: 'error' })
+      }
+      reader.readAsText(file, 'utf-8')
+    })
+  }, () => {
+    uni.showToast({ title: '无法访问文件', icon: 'error' })
+  })
 }
 
 /**
