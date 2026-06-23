@@ -266,6 +266,23 @@
         <view class="btn-big btn-warning" @click="triggerImport">导入数据恢复</view>
         <view class="btn-big btn-danger" @click="showClearConfirm = true">清空所有数据</view>
       </view>
+
+      <!-- 邮件备份配置 -->
+      <view class="section-title" style="margin-top: 24rpx;">邮件备份设置</view>
+      <view class="form-item">
+        <text class="form-label">Resend API Key</text>
+        <input class="form-input" v-model="form.resendApiKey" password placeholder="re_xxxxxxxxxx" />
+      </view>
+      <view class="form-item">
+        <text class="form-label">接收备份邮箱</text>
+        <input class="form-input" v-model="form.backupEmail" placeholder="your@email.com" />
+      </view>
+      <view class="form-tip">生成账单时通过 Resend 自动发送备份到该邮箱</view>
+      <view class="btn-big btn-primary" style="margin-top: 16rpx;" @click="saveBackupEmail">保存邮件配置</view>
+
+      <view class="form-tip" style="margin-top: 8rpx;">
+        没有 Resend 账号？<text style="color: #007AFF;" @click="openResendUrl">点击这里注册（免费）</text>
+      </view>
     </view>
 
     <!-- 调试工具 -->
@@ -444,7 +461,10 @@ const form = reactive({
   billGenerationEndDay: '',
   lateFeeStartDay: '',
   lateFeePerDay: '',
-  contractExpiryWarningDays: [30, 15, 3]
+  contractExpiryWarningDays: [30, 15, 3],
+  backupEmail: 'xufc2019@dingtalk.com',
+  resendApiKey: '',
+  autoBackupEnabled: true
 })
 
 const showClearConfirm = ref(false)
@@ -485,6 +505,9 @@ function loadSettings() {
   form.lateFeeStartDay = String(settings.lateFeeStartDay)
   form.lateFeePerDay = String(settings.lateFeePerDay)
   form.contractExpiryWarningDays = [...settings.contractExpiryWarningDays]
+  form.backupEmail = settings.backupEmail || 'xufc2019@dingtalk.com'
+  form.resendApiKey = settings.resendApiKey || ''
+  form.autoBackupEnabled = settings.autoBackupEnabled !== false  // 默认开启
   // 加载数据摘要
   dataSummary.value = db.getDataSummary()
 }
@@ -541,6 +564,31 @@ function saveLateFee() {
     lateFeePerDay: parseFloat(form.lateFeePerDay) || 5
   })
   uni.showToast({ title: '滞纳金规则已保存', icon: 'success' })
+}
+
+function saveBackupEmail() {
+  const email = (form.backupEmail || '').trim()
+  const apiKey = (form.resendApiKey || '').trim()
+  if (!email) {
+    uni.showToast({ title: '请输入有效的邮箱地址', icon: 'none' })
+    return
+  }
+  if (!apiKey) {
+    uni.showToast({ title: '请输入 Resend API Key', icon: 'none' })
+    return
+  }
+  console.log('[设置] 保存邮件配置 — 邮箱:', email, 'API Key 长度:', apiKey.length)
+  db.updateSettings({ backupEmail: email, resendApiKey: apiKey })
+  uni.showToast({ title: '邮件配置已保存', icon: 'success' })
+}
+
+function openResendUrl() {
+  // #ifdef APP-PLUS
+  plus.runtime.openURL('https://resend.com')
+  // #endif
+  // #ifdef H5
+  window.open('https://resend.com', '_blank')
+  // #endif
 }
 
 function saveContractWarning() {
@@ -1034,6 +1082,13 @@ onShow(() => {
   font-weight: 600;
   color: #333333;
   margin-bottom: 8px;
+}
+
+.form-tip {
+  font-size: 13px;
+  color: #999;
+  margin-top: 4px;
+  padding-left: 2px;
 }
 
 .form-hint {

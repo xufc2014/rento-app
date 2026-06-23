@@ -43,7 +43,11 @@ const DEFAULT_SETTINGS = {
   billGenerationEndDay: 30,
   lateFeeStartDay: 10,           // 逾期10天开始算滞纳金
   lateFeePerDay: 5,              // 每天加5元
-  contractExpiryWarningDays: [30, 15, 3] // 提前天数提醒
+  contractExpiryWarningDays: [30, 15, 3], // 提前天数提醒
+  backupEmail: 'xufc2019@dingtalk.com',       // 备份邮件接收地址
+  resendApiKey: '',                            // Resend API 密钥（用户自己注册获取）
+  lastBackupAt: null,                          // 上次备份时间
+  autoBackupEnabled: true                      // 生成账单时自动备份
 }
 
 class Database {

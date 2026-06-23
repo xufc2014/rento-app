@@ -163,6 +163,7 @@ import db from '@/utils/db.js'
 import { getNextMonth } from '@/utils/date.js'
 import { formatAmount } from '@/utils/calc.js'
 import { exportBillsToExcel } from '@/utils/export.js'
+import { sendBackupEmail } from '@/utils/email.js'
 
 const buildings = ref([])
 const selectedBuildingId = ref('')
@@ -266,6 +267,8 @@ function doGenerate() {
 
   if (successCount > 0) {
     uni.showToast({ title: `成功生成${successCount}笔账单`, icon: 'success' })
+    // 自动备份 + 邮件发送
+    autoBackupAndEmail(successCount)
   }
   if (failCount > 0) {
     uni.showToast({ title: `${failCount}笔生成失败`, icon: 'none' })
@@ -313,6 +316,98 @@ function doExport() {
     : ''
 
   exportBillsToExcel(successResults, selectedMonth.value, buildingName, db)
+}
+
+// 自动备份 + 邮件发送
+async function autoBackupAndEmail(successCount) {
+  console.log('========================================')
+  console.log('[自动备份] ====== 触发自动备份流程 ======')
+  console.log('[自动备份] 生成账单数:', successCount)
+
+  try {
+    // 1. 导出全部数据
+    const data = db.exportAllData()
+    console.log('[自动备份] 数据已导出，包含键:', Object.keys(data).join(', '))
+
+    // 2. 保存本地文件
+    const now = new Date()
+    const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
+    const fileName = `房东通_自动备份_${dateStr}.json`
+    const jsonStr = JSON.stringify(data, null, 2)
+    console.log('[自动备份] 本地文件名:', fileName)
+    console.log('[自动备份] JSON 大小:', jsonStr.length, 'bytes')
+
+    // 写入本地文件（APP-PLUS）
+    try {
+      // #ifdef APP-PLUS
+      console.log('[自动备份] APP-PLUS 模式，写入下载目录...')
+      const downloadsPath = plus.io.convertLocalFileSystemURL('_downloads')
+      console.log('[自动备份] 下载目录:', downloadsPath)
+
+      await new Promise((resolve, reject) => {
+        plus.io.requestFileSystem(plus.io.PUBLIC_DOWNLOADS, (fs) => {
+          fs.root.getFile(fileName, { create: true }, (fileEntry) => {
+            fileEntry.createWriter((writer) => {
+              writer.onwrite = () => {
+                console.log('[自动备份] ✅ 本地文件已保存')
+                resolve()
+              }
+              writer.onerror = (e) => {
+                console.error('[自动备份] 本地文件写入失败:', JSON.stringify(e))
+                reject(e)
+              }
+              writer.write(jsonStr)
+            }, reject)
+          }, reject)
+        }, reject)
+      })
+      // #endif
+
+      // #ifndef APP-PLUS
+      console.log('[自动备份] H5 模式，下载文件...')
+      try {
+        const blob = new Blob(['\uFEFF' + jsonStr], { type: 'application/json' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = fileName
+        a.click()
+        URL.revokeObjectURL(url)
+        console.log('[自动备份] ✅ 本地文件已下载:', fileName)
+      } catch (h5Err) {
+        console.warn('[自动备份] H5 下载失败:', h5Err)
+      }
+      // #endif
+    } catch (fileErr) {
+      console.error('[自动备份] 本地保存失败:', fileErr)
+    }
+
+    // 3. 发送邮件备份
+    const settings = db.getSettings()
+    const backupEmail = settings.backupEmail || 'xufc2019@dingtalk.com'
+    const apiKey = settings.resendApiKey || ''
+    console.log('[自动备份] 准备发送邮件到:', backupEmail, ', API Key 长度:', apiKey.length)
+
+    const result = await sendBackupEmail(backupEmail, apiKey, data, fileName)
+    console.log('[自动备份] 邮件发送结果:', JSON.stringify(result))
+
+    if (result.success) {
+      // 更新上次备份时间
+      db.updateSettings({ lastBackupAt: now.toISOString() })
+      console.log('[自动备份] ✅ 备份时间已更新')
+      uni.showToast({ title: '备份邮件已发送', icon: 'none', duration: 2000 })
+    } else {
+      console.warn('[自动备份] ⚠️ 邮件发送失败:', result.message)
+      uni.showToast({ title: '本地已备份，邮件发送失败', icon: 'none', duration: 3000 })
+    }
+
+  } catch (err) {
+    console.error('[自动备份] ❌ 备份流程异常:', err)
+    uni.showToast({ title: '自动备份失败', icon: 'none' })
+  } finally {
+    console.log('[自动备份] ====== 备份流程结束 ======')
+    console.log('========================================')
+  }
 }
 
 // 初始化
