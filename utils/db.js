@@ -492,7 +492,7 @@ class Database {
     if (idx === -1) return { error: '合同不存在' }
 
     // 只允许修改的字段
-    const allowedFields = ['startDate', 'endDate', 'rentAmount', 'depositAmount', 'depositRule', 'extraDeposit', 'extraDepositNote', 'sanitationFee', 'managementFee', 'otherFee']
+    const allowedFields = ['startDate', 'endDate', 'rentAmount', 'depositAmount', 'depositRule', 'extraDeposit', 'extraDepositNote', 'sanitationFee', 'managementFee', 'otherFee', 'initialWaterReading', 'initialElectricReading', 'initialGasReading']
     for (const key of allowedFields) {
       if (updates[key] !== undefined) {
         contracts[idx][key] = updates[key]
@@ -506,9 +506,84 @@ class Database {
       this.updateRoom(contracts[idx].roomId, { baseRent: updates.rentAmount })
     }
 
+    // 如果修改了初始读数，同步更新抄表记录
+    if (updates.initialWaterReading !== undefined || updates.initialElectricReading !== undefined || updates.initialGasReading !== undefined) {
+      this._syncInitialReadings(contracts[idx])
+    }
+
     this.logOperation('修改合同', 'contract', contractId,
       `修改了合同信息`)
     return contracts[idx]
+  }
+
+  /**
+   * 同步合同的初始读数到抄表记录
+   * 当编辑合同时修改了初始读数，更新对应的 isInitial 标记的抄表记录
+   */
+  _syncInitialReadings(contract) {
+    const types = ['water', 'electric', 'gas']
+    const fields = ['initialWaterReading', 'initialElectricReading', 'initialGasReading']
+    const readings = this.getMeterReadings()
+
+    for (let i = 0; i < types.length; i++) {
+      const meterType = types[i]
+      const field = fields[i]
+      const newValue = contract[field]
+
+      // 找到该房间该类型的初始读数记录
+      const initIdx = readings.findIndex(
+        r => r.roomId === contract.roomId && r.meterType === meterType && r.isInitial === true
+      )
+
+      if (initIdx !== -1) {
+        if (newValue != null && newValue !== '') {
+          // 更新已有初始读数
+          readings[initIdx].readingValue = Number(newValue)
+          readings[initIdx].notes = '入住底读（已修改）'
+        } else {
+          // 删除初始读数
+          readings.splice(initIdx, 1)
+        }
+      } else {
+        // 新增初始读数
+        if (newValue != null && newValue !== '') {
+          readings.push({
+            id: generateId(),
+            roomId: contract.roomId,
+            meterType: meterType,
+            readingValue: Number(newValue),
+            previousValue: 0,
+            consumption: 0,
+            isAnomaly: false,
+            anomalyType: null,
+            isAnomalyConfirmed: true,
+            photoPath: null,
+            readingDate: contract.startDate + 'T00:00:00.000Z',
+            usageMonth: contract.startDate.substring(0, 7),
+            recordedAt: new Date().toISOString(),
+            notes: '入住底读',
+            isInitial: true,
+            createdAt: new Date().toISOString()
+          })
+        }
+      }
+    }
+    this.set(KEYS.METER_READINGS, readings)
+  }
+
+  /**
+   * 获取某房间的合同初始读数（作为抄表回退）
+   * 返回 { water, electric, gas } 对象，值为数字或 null
+   */
+  getInitialReadingsForRoom(roomId) {
+    const activeContract = this.getActiveContracts().find(c => c.roomId === roomId)
+    if (!activeContract) return null
+    return {
+      water: activeContract.initialWaterReading != null ? Number(activeContract.initialWaterReading) : null,
+      electric: activeContract.initialElectricReading != null ? Number(activeContract.initialElectricReading) : null,
+      gas: activeContract.initialGasReading != null ? Number(activeContract.initialGasReading) : null,
+      date: activeContract.startDate  // 合同开始日期，作为初始读数日期
+    }
   }
 
   /**

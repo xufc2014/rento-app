@@ -84,6 +84,7 @@
           <view class="room-number">{{ room.roomNumber }}</view>
           <view class="room-tenant-name">{{ getTenantName(room) }}</view>
           <view v-if="savedRoomIds.has(room.id)" class="saved-badge">已抄</view>
+          <view v-else-if="partialRoomIds.has(room.id)" class="partial-badge">部分抄</view>
           <view v-if="selectedRoomId === room.id" class="editing-badge">录入中</view>
         </view>
 
@@ -376,7 +377,7 @@ function selectFloor(floor) {
   selectedFloor.value = floor
   selectedRoomId.value = ''
   clearInputs()
-  // 自动选中第一个未抄的已入住房间
+  // 自动选中第一个尚未完全抄完的房间（部分抄或未抄都行）
   const firstUnsaved = occupiedRoomsOnFloor.value.find(r => !savedRoomIds.value.has(r.id))
   if (firstUnsaved) {
     selectedRoomId.value = firstUnsaved.id
@@ -402,6 +403,8 @@ watch(selectedRoomId, () => {
 
 // ========== 已抄记录追踪 ==========
 const savedRoomIds = ref(new Set())
+// 部分抄表（只录了水电其中一个类型）
+const partialRoomIds = ref(new Set())
 
 function isFloorDone(floor) {
   if (!selectedBuildingId.value) return false
@@ -414,7 +417,8 @@ function isFloorDone(floor) {
 function refreshSavedStatus() {
   const allReadings = db.getAllMeterReadings ? db.getAllMeterReadings() : []
   const targetMonth = usageMonthPick.value
-  const roomSet = new Set()
+  const doneSet = new Set()
+  const partialSet = new Set()
   const roomTypeMap = {}
   allReadings.forEach(r => {
     if (r.usageMonth === targetMonth) {
@@ -422,13 +426,16 @@ function refreshSavedStatus() {
       roomTypeMap[r.roomId].add(r.meterType)
     }
   })
-  // 同时有水和电记录的房间标记为已抄
+  // 同时有水和电记录的房间标记为已抄；只有一种的标记为部分抄
   for (const [roomId, types] of Object.entries(roomTypeMap)) {
     if (types.has('water') && types.has('electric')) {
-      roomSet.add(roomId)
+      doneSet.add(roomId)
+    } else if (types.has('water') || types.has('electric')) {
+      partialSet.add(roomId)
     }
   }
-  savedRoomIds.value = roomSet
+  savedRoomIds.value = doneSet
+  partialRoomIds.value = partialSet
 }
 
 // ========== 上次读数 ==========
@@ -449,12 +456,16 @@ function loadLastReadings() {
   const waterLast = db.getLatestReading(selectedRoomId.value, 'water')
   const electricLast = db.getLatestReading(selectedRoomId.value, 'electric')
   const gasLast = db.getLatestReading(selectedRoomId.value, 'gas')
-  waterLastReading.value = waterLast ? waterLast.readingValue : null
-  waterLastDate.value = waterLast ? waterLast.readingDate : null
-  electricLastReading.value = electricLast ? electricLast.readingValue : null
-  electricLastDate.value = electricLast ? electricLast.readingDate : null
-  gasLastReading.value = gasLast ? gasLast.readingValue : null
-  gasLastDate.value = gasLast ? gasLast.readingDate : null
+
+  // 如果抄表记录中没有上次读数，回退到合同初始读数（底读）
+  const contractInit = (!waterLast || !electricLast) ? db.getInitialReadingsForRoom(selectedRoomId.value) : null
+
+  waterLastReading.value = waterLast ? waterLast.readingValue : (contractInit ? contractInit.water : null)
+  waterLastDate.value = waterLast ? waterLast.readingDate : (contractInit ? contractInit.date : null)
+  electricLastReading.value = electricLast ? electricLast.readingValue : (contractInit ? contractInit.electric : null)
+  electricLastDate.value = electricLast ? electricLast.readingDate : (contractInit ? contractInit.date : null)
+  gasLastReading.value = gasLast ? gasLast.readingValue : (contractInit ? contractInit.gas : null)
+  gasLastDate.value = gasLast ? gasLast.readingDate : (contractInit ? contractInit.date : null)
 
   // 检查当月是否已有抄表记录（已抄类型将被锁定）
   const month = usageMonthPick.value
@@ -538,26 +549,37 @@ const canSubmit = computed(() => {
   const electricNew = !electricDone && electricValue.value !== null && electricValue.value >= 0
   const gasNew = !gasDone && gasValue.value !== null && gasValue.value >= 0
 
-  // 水或电至少一个已有记录（之前或本次），且至少有一个是本次新录入的
-  const hasWater = waterDone || waterNew
-  const hasElectric = electricDone || electricNew
   const hasNewInput = waterNew || electricNew || gasNew
 
-  // 如果水电都已完成且没有新输入 → 不允许提交（全部已抄完）
+  // 水电都已完成且没有新输入 → 不允许提交（全部已抄完）
   if (waterDone && electricDone && !hasNewInput) return false
 
-  return hasWater && hasElectric && hasNewInput
+  // 只要有新输入就可以提交（支持只填电表或只填水表，方便逐项录入）
+  return hasNewInput
 })
 
 const submitBtnText = computed(() => {
   const waterDone = !!waterMonthReading.value
   const electricDone = !!electricMonthReading.value
+  const gasDone = !!gasMonthReading.value
+
+  const waterNew = !waterDone && waterValue.value !== null && waterValue.value >= 0
+  const electricNew = !electricDone && electricValue.value !== null && electricValue.value >= 0
+  const gasNew = !gasDone && gasValue.value !== null && gasValue.value >= 0
+
+  if (waterDone && electricDone && gasDone) return '本月已全部抄完'
   if (waterDone && electricDone) return '本月已全部抄完'
-  if (canSubmit.value) return '保存抄表数据'
+  if (canSubmit.value) {
+    const parts = []
+    if (waterNew) parts.push('水表')
+    if (electricNew) parts.push('电表')
+    if (gasNew) parts.push('气表')
+    return `保存${parts.join('、')}数据`
+  }
   const missing = []
-  if (!waterDone && !(waterValue.value !== null && waterValue.value >= 0)) missing.push('水表')
-  if (!electricDone && !(electricValue.value !== null && electricValue.value >= 0)) missing.push('电表')
-  if (missing.length > 0) return `请填写${missing.join('和')}读数`
+  if (!waterDone && !waterNew) missing.push('水表')
+  if (!electricDone && !electricNew) missing.push('电表')
+  if (missing.length === 1) return `请填写${missing[0]}读数`
   return '请至少填写一项读数'
 })
 
@@ -735,15 +757,16 @@ function doSubmit(forceConfirm) {
     return
   }
 
-  // 刷新已抄状态（只有水电都录完才标记为已抄）
+  // 刷新已抄状态（水电都录完标记为已抄，只有一种标记为部分抄）
   refreshSavedStatus()
 
   uni.showToast({ title: `${usageMonthCN.value}抄表成功`, icon: 'success' })
 
-  // 清空输入，自动跳到下一个未抄房间
+  // 清空输入，自动跳到下一个未完全抄完的房间
   setTimeout(() => {
     const currentRoomId = selectedRoomId.value
     clearInputs()
+    // 优先跳到未完全抄完的房间（含部分抄或未抄）
     const nextRoom = occupiedRoomsOnFloor.value.find(r => !savedRoomIds.value.has(r.id) && r.id !== currentRoomId)
     if (nextRoom) {
       selectedRoomId.value = nextRoom.id
@@ -997,6 +1020,15 @@ function goToManage() {
   border-radius: 6rpx;
   background: #E8F5E9;
   color: #4CAF50;
+  margin-left: auto;
+}
+
+.partial-badge {
+  font-size: 22rpx;
+  padding: 4rpx 14rpx;
+  border-radius: 6rpx;
+  background: #FFF3E0;
+  color: #FF9800;
   margin-left: auto;
 }
 

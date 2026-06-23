@@ -68,6 +68,24 @@
               <text class="info-label">月合计</text>
               <text class="info-value amount-red">{{ formatAmount(contract.rentAmount + (contract.internetFee || 0) + (contract.sanitationFee || 0) + (contract.managementFee || 0) + (contract.otherFee || 0)) }}</text>
             </view>
+
+            <view class="info-section-title">初始读数（底读）</view>
+            <view class="info-item" v-if="contract.initialWaterReading != null">
+              <text class="info-label">💧 水表底读</text>
+              <text class="info-value">{{ contract.initialWaterReading }} 吨</text>
+            </view>
+            <view class="info-item" v-if="contract.initialElectricReading != null">
+              <text class="info-label">⚡ 电表底读</text>
+              <text class="info-value">{{ contract.initialElectricReading }} 度</text>
+            </view>
+            <view class="info-item" v-if="contract.initialGasReading != null">
+              <text class="info-label">🔥 气表底读</text>
+              <text class="info-value">{{ contract.initialGasReading }} 方</text>
+            </view>
+            <view class="info-item" v-if="contract.initialWaterReading == null && contract.initialElectricReading == null && contract.initialGasReading == null">
+              <text class="info-label">初始读数</text>
+              <text class="info-value">未录入</text>
+            </view>
           </template>
 
           <!-- 编辑模式 -->
@@ -133,6 +151,20 @@
             <view class="edit-field">
               <text class="edit-label">其他费用</text>
               <input class="edit-input" type="digit" v-model="editForm.otherFee" placeholder="0" />
+            </view>
+
+            <view class="edit-section-title">初始读数（底读）</view>
+            <view class="edit-field">
+              <text class="edit-label">💧 水表底读（吨）</text>
+              <input class="edit-input" type="digit" v-model="editForm.initialWaterReading" placeholder="入住时水表读数" />
+            </view>
+            <view class="edit-field">
+              <text class="edit-label">⚡ 电表底读（度）</text>
+              <input class="edit-input" type="digit" v-model="editForm.initialElectricReading" placeholder="入住时电表读数" />
+            </view>
+            <view class="edit-field">
+              <text class="edit-label">🔥 气表底读（方）</text>
+              <input class="edit-input" type="digit" v-model="editForm.initialGasReading" placeholder="入住时气表读数" />
             </view>
           </template>
         </view>
@@ -265,7 +297,10 @@ const editForm = reactive({
   internetFee: '',
   sanitationFee: '',
   managementFee: '',
-  otherFee: ''
+  otherFee: '',
+  initialWaterReading: '',
+  initialElectricReading: '',
+  initialGasReading: ''
 })
 
 const depositRules = ['押一付一', '押二付一', '押一付三']
@@ -395,6 +430,9 @@ function startEdit() {
   editForm.sanitationFee = c.sanitationFee ? String(c.sanitationFee) : ''
   editForm.managementFee = c.managementFee ? String(c.managementFee) : ''
   editForm.otherFee = c.otherFee ? String(c.otherFee) : ''
+  editForm.initialWaterReading = c.initialWaterReading != null ? String(c.initialWaterReading) : ''
+  editForm.initialElectricReading = c.initialElectricReading != null ? String(c.initialElectricReading) : ''
+  editForm.initialGasReading = c.initialGasReading != null ? String(c.initialGasReading) : ''
   isEditing.value = true
 }
 
@@ -423,7 +461,10 @@ function saveEdit() {
     internetFee: Number(editForm.internetFee) || 0,
     sanitationFee: Number(editForm.sanitationFee) || 0,
     managementFee: Number(editForm.managementFee) || 0,
-    otherFee: Number(editForm.otherFee) || 0
+    otherFee: Number(editForm.otherFee) || 0,
+    initialWaterReading: editForm.initialWaterReading ? Number(editForm.initialWaterReading) : null,
+    initialElectricReading: editForm.initialElectricReading ? Number(editForm.initialElectricReading) : null,
+    initialGasReading: editForm.initialGasReading ? Number(editForm.initialGasReading) : null
   })
 
   if (result.error) {
@@ -539,6 +580,26 @@ function goCheckout() {
 
 .amount-red {
   color: #FF3B30;
+}
+
+.info-section-title {
+  width: 100%;
+  font-size: 14px;
+  font-weight: 700;
+  color: #007AFF;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.edit-section-title {
+  width: 100%;
+  font-size: 14px;
+  font-weight: 700;
+  color: #007AFF;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #f0f0f0;
 }
 
 .countdown {
