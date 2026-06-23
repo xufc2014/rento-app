@@ -122,6 +122,28 @@
         <view class="btn-big btn-danger" style="margin-top: 10px;" @click="confirmDeleteBuilding">删除此楼栋</view>
       </view>
     </view>
+
+    <!-- 密码确认弹窗 -->
+    <view class="modal-mask" v-if="pwd.visible.value" @click="pwd.cancel">
+      <view class="modal-box password-modal" @click.stop>
+        <text class="modal-title" style="color:#333;">管理密码验证</text>
+        <text class="modal-desc" style="color:#999;font-size:14px;">{{ pwd.message.value }}</text>
+        <input
+          class="pwd-input"
+          type="password"
+          :value="pwd.inputValue.value"
+          @input="e => pwd.inputValue.value = e.detail.value"
+          placeholder="请输入管理密码"
+          maxlength="20"
+          @confirm="pwd.confirm"
+        />
+        <text class="pwd-error" v-if="pwd.errorMsg.value">{{ pwd.errorMsg.value }}</text>
+        <view class="modal-buttons" style="margin-top: 8px;">
+          <view class="btn-big modal-btn-cancel" @click="pwd.cancel">取消</view>
+          <view class="btn-big btn-primary modal-btn-confirm" @click="pwd.confirm">确认</view>
+        </view>
+      </view>
+    </view>
   </view>
 </template>
 
@@ -130,6 +152,7 @@ import { ref, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import db from '@/utils/db.js'
 import { formatAmount } from '@/utils/calc.js'
+import { usePasswordGuard } from '@/utils/password.js'
 
 // ============ 状态 ============
 
@@ -138,6 +161,9 @@ const activeBuildingId = ref('')
 const rooms = ref([])
 const editMode = ref(false)
 const selectedIds = ref(new Set())
+
+// 密码确认控制器
+const pwd = usePasswordGuard()
 
 const statusMap = {
   '空置': 'tag-gray',
@@ -235,9 +261,11 @@ function confirmDeleteBuilding() {
     cancelText: '取消',
     success(res) {
       if (res.confirm) {
-        db.deleteBuilding(activeBuildingId.value)
-        uni.showToast({ title: '楼栋已删除', icon: 'success' })
-        loadData()
+        pwd.guard(() => {
+          db.deleteBuilding(activeBuildingId.value)
+          uni.showToast({ title: '楼栋已删除', icon: 'success' })
+          loadData()
+        }, `删除楼栋"${building.name}"不可恢复，请输入管理密码确认`)
       }
     }
   })
@@ -305,7 +333,9 @@ function confirmDelete() {
     cancelText: '取消',
     success(res) {
       if (res.confirm) {
-        doDelete()
+        pwd.guard(() => {
+          doDelete()
+        }, `删除 ${selectedIds.value.size} 间房间不可恢复，请输入管理密码确认`)
       }
     }
   })
@@ -673,5 +703,92 @@ function doDelete() {
 .btn-danger {
   background-color: #FF3B30;
   color: #ffffff;
+}
+
+/* ========== 密码弹窗 ========== */
+.modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+
+.modal-box {
+  width: 320px;
+  background-color: #ffffff;
+  border-radius: 16px;
+  padding: 28px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.password-modal {
+  width: 300px;
+}
+
+.modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 14px;
+}
+
+.modal-desc {
+  font-size: 15px;
+  color: #666;
+  line-height: 1.6;
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.modal-buttons {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+}
+
+.modal-btn-cancel {
+  flex: 1;
+  background-color: #f0f0f0;
+  color: #666;
+  height: 44px;
+  line-height: 44px;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.modal-btn-confirm {
+  flex: 1;
+  height: 44px;
+  line-height: 44px;
+  font-size: 16px;
+}
+
+.pwd-input {
+  width: 100%;
+  height: 48px;
+  background-color: #f5f5f5;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  padding: 0 16px;
+  font-size: 18px;
+  text-align: center;
+  letter-spacing: 4px;
+  margin-bottom: 4px;
+}
+
+.pwd-error {
+  font-size: 13px;
+  color: #FF3B30;
+  margin-top: 4px;
 }
 </style>

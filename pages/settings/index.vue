@@ -361,6 +361,28 @@
     </view>
 
     <!-- 导入数据（隐藏的文件选择触发） -->
+
+    <!-- 密码确认弹窗 -->
+    <view class="modal-mask" v-if="pwd.visible.value" @click="pwd.cancel">
+      <view class="modal-box password-modal" @click.stop>
+        <text class="modal-title" style="color:#333;">管理密码验证</text>
+        <text class="modal-desc" style="color:#999;font-size:14px;">{{ pwd.message.value }}</text>
+        <input
+          class="pwd-input"
+          type="password"
+          :value="pwd.inputValue.value"
+          @input="e => pwd.inputValue.value = e.detail.value"
+          placeholder="请输入管理密码"
+          maxlength="20"
+          @confirm="pwd.confirm"
+        />
+        <text class="pwd-error" v-if="pwd.errorMsg.value">{{ pwd.errorMsg.value }}</text>
+        <view class="modal-buttons" style="margin-top: 8px;">
+          <view class="btn-big modal-btn-cancel" @click="pwd.cancel">取消</view>
+          <view class="btn-big btn-primary modal-btn-confirm" @click="pwd.confirm">确认</view>
+        </view>
+      </view>
+    </view>
   </view>
 </template>
 
@@ -368,6 +390,7 @@
 import { ref, reactive, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import db from '@/utils/db.js'
+import { usePasswordGuard } from '@/utils/password.js'
 
 // 初始化测试数据月份（默认当前月）
 function getDefaultSeedMonth() {
@@ -429,6 +452,9 @@ const showImportConfirm = ref(false)
 const importPreview = ref(null)          // 导入文件摘要
 const pendingImportData = ref(null)      // 待导入的原始数据
 const dataSummary = ref(null)            // 当前数据摘要
+
+// 密码确认控制器
+const pwd = usePasswordGuard()
 
 // 押金规则 picker 索引
 const depositIndex = computed(() => {
@@ -906,17 +932,18 @@ function handleImportData(dataStr) {
  */
 function confirmImport() {
   if (!pendingImportData.value) return
-  const result = db.importAllData(pendingImportData.value)
   showImportConfirm.value = false
-  pendingImportData.value = null
-  importPreview.value = null
-
-  if (result.success) {
-    loadSettings()
-    uni.showToast({ title: '数据导入成功', icon: 'success', duration: 2500 })
-  } else {
-    uni.showToast({ title: '导入失败: ' + (result.error || '未知错误'), icon: 'error', duration: 3000 })
-  }
+  pwd.guard(() => {
+    const result = db.importAllData(pendingImportData.value)
+    pendingImportData.value = null
+    importPreview.value = null
+    if (result.success) {
+      loadSettings()
+      uni.showToast({ title: '数据导入成功', icon: 'success', duration: 2500 })
+    } else {
+      uni.showToast({ title: '导入失败: ' + (result.error || '未知错误'), icon: 'error', duration: 3000 })
+    }
+  }, '导入数据将覆盖当前所有数据，请输入管理密码确认')
 }
 
 // H5 环境文件选择回调
@@ -935,10 +962,12 @@ function onFileSelected(e) {
 }
 
 function confirmClearAll() {
-  db.clearAllData()
-  loadSettings()
   showClearConfirm.value = false
-  uni.showToast({ title: '所有数据已清空', icon: 'success' })
+  pwd.guard(() => {
+    db.clearAllData()
+    loadSettings()
+    uni.showToast({ title: '所有数据已清空', icon: 'success' })
+  }, '清空所有数据不可恢复，请输入管理密码确认')
 }
 
 // ============ 调试工具 ============
@@ -951,15 +980,14 @@ function seedMeterReadings() {
     content: `将清空现有抄表数据，为每个房间随机生成${monthLabel}的初始水/电表读数。确定？`,
     success: (res) => {
       if (res.confirm) {
-        const result = db.seedMeterReadings(month)
-        if (result.error) {
-          uni.showToast({ title: result.error, icon: 'none' })
-        } else {
-          uni.showToast({
-            title: `已生成${result.roomCount}间×2条记录`,
-            icon: 'success'
-          })
-        }
+        pwd.guard(() => {
+          const result = db.seedMeterReadings(month)
+          if (result.error) {
+            uni.showToast({ title: result.error, icon: 'none' })
+          } else {
+            uni.showToast({ title: `已生成${result.roomCount}间×2条记录`, icon: 'success' })
+          }
+        }, '生成测试数据将清空现有抄表，请输入管理密码确认')
       }
     }
   })
@@ -1427,5 +1455,29 @@ onShow(() => {
   height: 44px;
   line-height: 44px;
   font-size: 16px;
+}
+
+/* ========== 密码弹窗 ========== */
+.password-modal {
+  width: 300px;
+}
+
+.pwd-input {
+  width: 100%;
+  height: 48px;
+  background-color: #f5f5f5;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  padding: 0 16px;
+  font-size: 18px;
+  text-align: center;
+  letter-spacing: 4px;
+  margin-bottom: 4px;
+}
+
+.pwd-error {
+  font-size: 13px;
+  color: #FF3B30;
+  margin-top: 4px;
 }
 </style>
