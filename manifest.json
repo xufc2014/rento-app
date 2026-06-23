@@ -1,29 +1,32 @@
 {
-    "name": "房东通",
-    "appid": "__UNI__RENTO",
-    "description": "极简出租屋管理助手",
-    "versionName": "1.0.0",
-    "versionCode": "100",
-    "transformPx": false,
-    "vueVersion": "3",
-    "app-plus": {
-        "distribute": {
-            "android": {
-                "permissions": [
+    "name" : "房东通",
+    "appid" : "__UNI__0C06E26",
+    "description" : "极简出租屋管理助手",
+    "versionName" : "1.0.0",
+    "versionCode" : "100",
+    "transformPx" : false,
+    "vueVersion" : "3",
+    "app-plus" : {
+        "distribute" : {
+            "android" : {
+                "permissions" : [
                     "<uses-permission android:name=\"android.permission.CAMERA\"/>",
                     "<uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\"/>",
                     "<uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\"/>"
                 ]
+            },
+            "ios" : {
+                "dSYMs" : false
             }
         },
-        "modules": {
-            "Camera": {}
+        "modules" : {
+            "Camera" : {}
         }
     },
-    "h5": {
-        "title": "房东通",
-        "router": {
-            "mode": "hash"
+    "h5" : {
+        "title" : "房东通",
+        "router" : {
+            "mode" : "hash"
         }
     }
 }
