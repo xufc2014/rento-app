@@ -882,8 +882,12 @@ class Database {
 
     readings[idx] = reading
     this.set(KEYS.METER_READINGS, readings)
+    const upRoom = this.getRoomById(reading.roomId)
+    const upBuilding = upRoom ? this.getBuildingById(upRoom.buildingId) : null
+    const upRoomLabel = upBuilding && upRoom ? `${upBuilding.name} ${upRoom.floor}F-${upRoom.roomNumber}` : (upRoom ? `${upRoom.floor}F-${upRoom.roomNumber}` : '未知房间')
+    const typeNames = { water: '水表', electric: '电表', gas: '气表' }
     this.logOperation('修改抄表', 'meter', id,
-      `${reading.meterType}: ${reading.previousValue}→${reading.readingValue}, 用量${reading.consumption}`)
+      `${upRoomLabel} ${typeNames[reading.meterType] || reading.meterType}: ${reading.previousValue}→${reading.readingValue}, 用量${reading.consumption}`)
     return reading
   }
 
@@ -929,8 +933,11 @@ class Database {
     }
     readings.push(newReading)
     this.set(KEYS.METER_READINGS, readings)
+    const addBuilding = room ? this.getBuildingById(room.buildingId) : null
+    const addRoomLabel = addBuilding && room ? `${addBuilding.name} ${room.floor}F-${room.roomNumber}` : (room ? `${room.floor}F-${room.roomNumber}` : '未知房间')
+    const addTypeNames = { water: '水表', electric: '电表', gas: '气表' }
     this.logOperation('抄表录入', 'meter', newReading.id,
-      `${reading.meterType}: ${previousValue}→${reading.readingValue}, 用量${consumption}`)
+      `${addRoomLabel} ${addTypeNames[reading.meterType] || reading.meterType}: ${previousValue}→${reading.readingValue}, 用量${consumption}`)
     return newReading
   }
 
