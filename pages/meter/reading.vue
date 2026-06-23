@@ -19,7 +19,10 @@
     <view class="location-card" v-if="usageMonthConfirmed">
       <view class="month-badge-bar">
         <view class="month-badge">抄表月份：{{ usageMonthCN }}</view>
-        <view class="month-change" @click="changeUsageMonth">修改月份</view>
+        <view class="month-actions">
+          <view class="month-change" @click="changeUsageMonth">修改月份</view>
+          <view class="manage-entry" @click="goToManage">抄表管理</view>
+        </view>
       </view>
 
       <view class="select-row" v-if="buildings.length > 0">
@@ -88,7 +91,20 @@
         <view v-if="selectedRoomId === room.id" class="room-input-area" @click.stop>
 
           <!-- ===== 水表 ===== -->
-          <view class="meter-section water-section">
+          <!-- 已录入状态：只读锁定 -->
+          <view v-if="waterMonthReading" class="meter-section water-section locked-section">
+            <view class="meter-header">
+              <text class="meter-title">💧 水表</text>
+              <text class="locked-badge">已录入</text>
+            </view>
+            <view class="locked-reading">
+              <text class="locked-val">{{ waterMonthReading.readingValue }} 吨</text>
+              <text class="locked-tip">本月已录入，如需修改请到</text>
+              <text class="locked-link" @click="goToManage">抄表管理</text>
+            </view>
+          </view>
+          <!-- 未录入状态：可输入 -->
+          <view v-else class="meter-section water-section">
             <view class="meter-header">
               <text class="meter-title">💧 水表</text>
               <text class="meter-unit">单位：吨</text>
@@ -114,7 +130,20 @@
           </view>
 
           <!-- ===== 电表 ===== -->
-          <view class="meter-section electric-section">
+          <!-- 已录入状态：只读锁定 -->
+          <view v-if="electricMonthReading" class="meter-section electric-section locked-section">
+            <view class="meter-header">
+              <text class="meter-title">⚡ 电表</text>
+              <text class="locked-badge">已录入</text>
+            </view>
+            <view class="locked-reading">
+              <text class="locked-val">{{ electricMonthReading.readingValue }} 度</text>
+              <text class="locked-tip">本月已录入，如需修改请到</text>
+              <text class="locked-link" @click="goToManage">抄表管理</text>
+            </view>
+          </view>
+          <!-- 未录入状态：可输入 -->
+          <view v-else class="meter-section electric-section">
             <view class="meter-header">
               <text class="meter-title">⚡ 电表</text>
               <text class="meter-unit">单位：度</text>
@@ -140,7 +169,20 @@
           </view>
 
           <!-- ===== 气表 ===== -->
-          <view class="meter-section gas-section">
+          <!-- 已录入状态：只读锁定 -->
+          <view v-if="gasMonthReading" class="meter-section gas-section locked-section">
+            <view class="meter-header">
+              <text class="meter-title">🔥 气表</text>
+              <text class="locked-badge">已录入</text>
+            </view>
+            <view class="locked-reading">
+              <text class="locked-val">{{ gasMonthReading.readingValue }} 方</text>
+              <text class="locked-tip">本月已录入，如需修改请到</text>
+              <text class="locked-link" @click="goToManage">抄表管理</text>
+            </view>
+          </view>
+          <!-- 未录入状态：可输入 -->
+          <view v-else class="meter-section gas-section">
             <view class="meter-header">
               <text class="meter-title">🔥 气表</text>
               <text class="meter-unit">单位：方</text>
@@ -166,13 +208,13 @@
           </view>
 
           <!-- 拍照（可选） -->
-          <view class="photo-section">
+          <view class="photo-section" v-if="hasUnrecordedType">
             <view class="section-label">表底拍照（可选）</view>
             <view class="photo-row">
-              <view class="photo-btn-mini" @click="takePhoto('water')">
+              <view class="photo-btn-mini" @click="takePhoto('water')" v-if="!waterMonthReading">
                 💧 水表
               </view>
-              <view class="photo-btn-mini" @click="takePhoto('electric')">
+              <view class="photo-btn-mini" @click="takePhoto('electric')" v-if="!electricMonthReading">
                 ⚡ 电表
               </view>
             </view>
@@ -191,7 +233,7 @@
           </view>
 
           <!-- 备注 -->
-          <view class="input-section">
+          <view class="input-section" v-if="hasUnrecordedType">
             <view class="section-label">备注（可选）</view>
             <textarea class="notes-input" v-model="notes" placeholder="如有异常说明请在此填写" />
           </view>
@@ -199,7 +241,7 @@
           <!-- 保存按钮 -->
           <view class="action-bar">
             <button class="btn-primary" :disabled="!canSubmit" @click="submitReadings">
-              {{ canSubmit ? '保存抄表数据' : '请至少填写一项读数' }}
+              {{ submitBtnText }}
             </button>
           </view>
         </view>
@@ -371,14 +413,11 @@ function isFloorDone(floor) {
 
 function refreshSavedStatus() {
   const allReadings = db.getAllMeterReadings ? db.getAllMeterReadings() : []
-  // 按用户选择的抄表月份来判断哪些房间已抄
   const targetMonth = usageMonthPick.value
   const roomSet = new Set()
   const roomTypeMap = {}
   allReadings.forEach(r => {
-    // 用 readingDate 的月份部分判断（不是 createdAt）
-    const readingMonth = r.readingDate ? r.readingDate.substring(0, 7) : ''
-    if (readingMonth === targetMonth) {
+    if (r.usageMonth === targetMonth) {
       if (!roomTypeMap[r.roomId]) roomTypeMap[r.roomId] = new Set()
       roomTypeMap[r.roomId].add(r.meterType)
     }
@@ -400,6 +439,11 @@ const electricLastDate = ref(null)
 const gasLastReading = ref(null)
 const gasLastDate = ref(null)
 
+// 当前月份该房间已抄记录（用于锁定已抄类型）
+const waterMonthReading = ref(null)
+const electricMonthReading = ref(null)
+const gasMonthReading = ref(null)
+
 function loadLastReadings() {
   if (!selectedRoomId.value) return
   const waterLast = db.getLatestReading(selectedRoomId.value, 'water')
@@ -411,6 +455,17 @@ function loadLastReadings() {
   electricLastDate.value = electricLast ? electricLast.readingDate : null
   gasLastReading.value = gasLast ? gasLast.readingValue : null
   gasLastDate.value = gasLast ? gasLast.readingDate : null
+
+  // 检查当月是否已有抄表记录（已抄类型将被锁定）
+  const month = usageMonthPick.value
+  waterMonthReading.value = db.getMonthReading(selectedRoomId.value, 'water', month)
+  electricMonthReading.value = db.getMonthReading(selectedRoomId.value, 'electric', month)
+  gasMonthReading.value = db.getMonthReading(selectedRoomId.value, 'gas', month)
+
+  // 如果已录入类型有值，回填到输入框（展示用）
+  if (waterMonthReading.value) waterInput.value = String(waterMonthReading.value.readingValue)
+  if (electricMonthReading.value) electricInput.value = String(electricMonthReading.value.readingValue)
+  if (gasMonthReading.value) gasInput.value = String(gasMonthReading.value.readingValue)
 }
 
 // ========== 本次读数 ==========
@@ -473,8 +528,42 @@ const gasEstimatedCost = computed(() => {
 })
 
 const canSubmit = computed(() => {
-  return (waterValue.value !== null && waterValue.value >= 0) ||
-         (electricValue.value !== null && electricValue.value >= 0)
+  // 已经本月录入过的类型视为"已完成"
+  const waterDone = !!waterMonthReading.value
+  const electricDone = !!electricMonthReading.value
+  const gasDone = !!gasMonthReading.value
+
+  // 新输入的类型
+  const waterNew = !waterDone && waterValue.value !== null && waterValue.value >= 0
+  const electricNew = !electricDone && electricValue.value !== null && electricValue.value >= 0
+  const gasNew = !gasDone && gasValue.value !== null && gasValue.value >= 0
+
+  // 水或电至少一个已有记录（之前或本次），且至少有一个是本次新录入的
+  const hasWater = waterDone || waterNew
+  const hasElectric = electricDone || electricNew
+  const hasNewInput = waterNew || electricNew || gasNew
+
+  // 如果水电都已完成且没有新输入 → 不允许提交（全部已抄完）
+  if (waterDone && electricDone && !hasNewInput) return false
+
+  return hasWater && hasElectric && hasNewInput
+})
+
+const submitBtnText = computed(() => {
+  const waterDone = !!waterMonthReading.value
+  const electricDone = !!electricMonthReading.value
+  if (waterDone && electricDone) return '本月已全部抄完'
+  if (canSubmit.value) return '保存抄表数据'
+  const missing = []
+  if (!waterDone && !(waterValue.value !== null && waterValue.value >= 0)) missing.push('水表')
+  if (!electricDone && !(electricValue.value !== null && electricValue.value >= 0)) missing.push('电表')
+  if (missing.length > 0) return `请填写${missing.join('和')}读数`
+  return '请至少填写一项读数'
+})
+
+// 是否还有未录入的类型（用于控制拍照/备注区域显示）
+const hasUnrecordedType = computed(() => {
+  return !waterMonthReading.value || !electricMonthReading.value || !gasMonthReading.value
 })
 
 function onWaterInput() {}
@@ -592,26 +681,25 @@ function doSubmit(forceConfirm) {
   const results = []
 
   // 构造用量月份的日期：用户选择的月份 + 当天日期
-  // 比如7月1号抄6月的表 → readingDate = 2026-06-01T...（算6月用量）
   const usageDate = buildUsageDate(usageMonthPick.value)
 
-  // 保存水表
-  if (waterValue.value !== null && waterValue.value >= 0) {
+  // 保存水表（仅当月未录入时）
+  if (!waterMonthReading.value && waterValue.value !== null && waterValue.value >= 0) {
     const reading = {
       roomId: selectedRoomId.value,
       meterType: 'water',
       readingValue: waterValue.value,
       forceConfirm: forceConfirm,
       photoPath: waterPhotoPath.value,
-      readingDate: usageDate,   // 用量月份日期，不是当天
-      recordedAt: new Date().toISOString(),  // 实际录入时间
+      readingDate: usageDate,
+      recordedAt: new Date().toISOString(),
       notes: notes.value
     }
     results.push(db.addMeterReading(reading))
   }
 
-  // 保存电表
-  if (electricValue.value !== null && electricValue.value >= 0) {
+  // 保存电表（仅当月未录入时）
+  if (!electricMonthReading.value && electricValue.value !== null && electricValue.value >= 0) {
     const reading = {
       roomId: selectedRoomId.value,
       meterType: 'electric',
@@ -625,8 +713,8 @@ function doSubmit(forceConfirm) {
     results.push(db.addMeterReading(reading))
   }
 
-  // 保存气表（选填）
-  if (gasValue.value !== null && gasValue.value >= 0) {
+  // 保存气表（选填，仅当月未录入时）
+  if (!gasMonthReading.value && gasValue.value !== null && gasValue.value >= 0) {
     const reading = {
       roomId: selectedRoomId.value,
       meterType: 'gas',
@@ -647,8 +735,8 @@ function doSubmit(forceConfirm) {
     return
   }
 
-  // 标记已抄
-  savedRoomIds.value.add(selectedRoomId.value)
+  // 刷新已抄状态（只有水电都录完才标记为已抄）
+  refreshSavedStatus()
 
   uni.showToast({ title: `${usageMonthCN.value}抄表成功`, icon: 'success' })
 
@@ -687,8 +775,15 @@ function clearInputs() {
   electricPhotoPath.value = ''
   gasLastReading.value = null
   gasLastDate.value = null
+  waterMonthReading.value = null
+  electricMonthReading.value = null
+  gasMonthReading.value = null
   pendingForceConfirmWater = false
   pendingForceConfirmElectric = false
+}
+
+function goToManage() {
+  uni.navigateTo({ url: '/pages/meter/manage' })
 }
 </script>
 
@@ -752,11 +847,24 @@ function clearInputs() {
   color: #007AFF;
 }
 
+.month-actions {
+  display: flex;
+  gap: 12rpx;
+}
+
 .month-change {
   font-size: 24rpx;
   color: #FF6B00;
   padding: 6rpx 16rpx;
   border: 2rpx solid #FF6B00;
+  border-radius: 6rpx;
+}
+
+.manage-entry {
+  font-size: 24rpx;
+  color: #007AFF;
+  padding: 6rpx 16rpx;
+  border: 2rpx solid #007AFF;
   border-radius: 6rpx;
 }
 
@@ -926,6 +1034,48 @@ function clearInputs() {
 .meter-section.gas-section {
   border-left: 6rpx solid #52C41A;
 }
+
+/* 已录入锁定状态 */
+.locked-section {
+  opacity: 0.85;
+  background: #F8F8F8;
+}
+
+.locked-badge {
+  font-size: 22rpx;
+  padding: 4rpx 14rpx;
+  border-radius: 6rpx;
+  background: #E8F5E9;
+  color: #4CAF50;
+  font-weight: bold;
+}
+
+.locked-reading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8rpx;
+  margin-top: 8rpx;
+}
+
+.locked-val {
+  font-size: 40rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.locked-tip {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.locked-link {
+  font-size: 24rpx;
+  color: #007AFF;
+  text-decoration: underline;
+}
+
+/* 抄表管理入口 */
 
 .meter-header {
   display: flex;

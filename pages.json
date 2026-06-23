@@ -56,6 +56,12 @@
       }
     },
     {
+      "path": "pages/meter/manage",
+      "style": {
+        "navigationBarTitleText": "抄表管理"
+      }
+    },
+    {
       "path": "pages/bill/generate",
       "style": {
         "navigationBarTitleText": "生成账单"

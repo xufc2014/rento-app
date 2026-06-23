@@ -816,6 +816,78 @@ class Database {
   }
 
   /**
+   * 获取某房间某类型在某月份是否已有抄表记录
+   * @param {string} roomId
+   * @param {string} meterType - 'water' | 'electric' | 'gas'
+   * @param {string} month - 格式 "2026-06"
+   * @returns {object|null} 该月份的抄表记录，或 null
+   */
+  getMonthReading(roomId, meterType, month) {
+    return this.getMeterReadings().find(r =>
+      r.roomId === roomId &&
+      r.meterType === meterType &&
+      r.usageMonth === month
+    ) || null
+  }
+
+  /**
+   * 修改抄表记录（用于抄表管理页面）
+   * 会重算 consumption/previousValue，并级联更新后续记录的 previousValue
+   * @param {string} id - 记录ID
+   * @param {object} updates - { readingValue?, notes? }
+   * @returns {object|null} 更新后的记录
+   */
+  updateMeterReading(id, updates) {
+    const readings = this.getMeterReadings()
+    const idx = readings.findIndex(r => r.id === id)
+    if (idx === -1) return null
+
+    const reading = readings[idx]
+
+    // 更新字段
+    if (updates.readingValue !== undefined) {
+      reading.readingValue = Number(updates.readingValue)
+    }
+    if (updates.notes !== undefined) {
+      reading.notes = updates.notes
+    }
+
+    // 重算 consumption：找到该房间该类型中排在此记录之前的最近一条
+    const allForRoom = readings
+      .filter(r => r.roomId === reading.roomId && r.meterType === reading.meterType)
+      .sort((a, b) => new Date(a.readingDate) - new Date(b.readingDate))
+
+    const currentPos = allForRoom.findIndex(r => r.id === id)
+    const previousReading = currentPos > 0 ? allForRoom[currentPos - 1] : null
+    reading.previousValue = previousReading ? previousReading.readingValue : 0
+    reading.consumption = Math.round((reading.readingValue - reading.previousValue) * 100) / 100
+
+    // 修改后清除异常标记（用户主动修正）
+    reading.isAnomaly = false
+    reading.anomalyType = null
+    reading.isAnomalyConfirmed = true
+
+    // 级联更新后续记录的 previousValue
+    for (let i = currentPos + 1; i < allForRoom.length; i++) {
+      const nextReading = allForRoom[i]
+      const prevReading = allForRoom[i - 1]
+      nextReading.previousValue = prevReading.readingValue
+      nextReading.consumption = Math.round((nextReading.readingValue - nextReading.previousValue) * 100) / 100
+      // 同步更新回主数组
+      const nextIdx = readings.findIndex(r => r.id === nextReading.id)
+      if (nextIdx !== -1) {
+        readings[nextIdx] = nextReading
+      }
+    }
+
+    readings[idx] = reading
+    this.set(KEYS.METER_READINGS, readings)
+    this.logOperation('修改抄表', 'meter', id,
+      `${reading.meterType}: ${reading.previousValue}→${reading.readingValue}, 用量${reading.consumption}`)
+    return reading
+  }
+
+  /**
    * 录入抄表数据 - 含防错逻辑
    */
   addMeterReading(reading) {
