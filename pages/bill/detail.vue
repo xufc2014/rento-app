@@ -130,7 +130,7 @@
 import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import db from '@/utils/db.js'
-import { formatAmount } from '@/utils/calc.js'
+import { formatAmount, calcUtilityFee } from '@/utils/calc.js'
 
 const billId = ref('')
 const bill = ref(null)
@@ -163,7 +163,23 @@ function loadBill() {
     uni.showToast({ title: '账单不存在', icon: 'none' })
     return
   }
-  bill.value = b
+
+  // 实时重算水电费（即使旧账单存储为 0 也能显示正确费用）
+  const usageMonth = b.usageMonth || getPrevMonth(b.month)
+  const recalcWaterFee = calcUtilityFee(b.roomId, 'water', usageMonth, db)
+  const recalcElectricFee = calcUtilityFee(b.roomId, 'electric', usageMonth, db)
+  const recalcGasFee = calcUtilityFee(b.roomId, 'gas', usageMonth, db)
+
+  bill.value = {
+    ...b,
+    waterFee: recalcWaterFee > 0 ? recalcWaterFee : b.waterFee,
+    electricFee: recalcElectricFee > 0 ? recalcElectricFee : b.electricFee,
+    gasFee: recalcGasFee > 0 ? recalcGasFee : b.gasFee
+  }
+  // 重算总额
+  bill.value.totalAmount = bill.value.rentAmount + bill.value.waterFee + bill.value.electricFee
+    + bill.value.gasFee + bill.value.internetFee + bill.value.sanitationFee
+    + bill.value.managementFee + bill.value.otherFee - bill.value.deduction
 
   // 房间信息
   const room = db.getRoomById(b.roomId) || {}
@@ -174,27 +190,42 @@ function loadBill() {
   const tenant = db.getTenantById(b.tenantId)
   tenantName.value = tenant ? tenant.name : '未知租客'
 
-  // 水电读数信息
-  const waterReading = db.getLatestReading(b.roomId, 'water')
+  // 水电读数信息 — 使用账单对应用量月份的读数
+  const allWater = db.getMeterReadingsByRoom(b.roomId)
+    .filter(r => r.meterType === 'water')
+    .sort((a, b) => new Date(b.readingDate) - new Date(a.readingDate))
+  const waterReading = allWater.find(r => r.readingDate.startsWith(usageMonth)) || allWater[0]
   if (waterReading) {
-    waterInfo.value = `上次${waterReading.previousValue} → 本次${waterReading.readingValue}，用量${waterReading.consumption}`
+    waterInfo.value = `上次${waterReading.previousValue || '?'} → 本次${waterReading.readingValue}，用量${waterReading.consumption}`
     waterPhoto.value = waterReading.photoPath || ''
   }
 
-  const electricReading = db.getLatestReading(b.roomId, 'electric')
+  const allElectric = db.getMeterReadingsByRoom(b.roomId)
+    .filter(r => r.meterType === 'electric')
+    .sort((a, b) => new Date(b.readingDate) - new Date(a.readingDate))
+  const electricReading = allElectric.find(r => r.readingDate.startsWith(usageMonth)) || allElectric[0]
   if (electricReading) {
-    electricInfo.value = `上次${electricReading.previousValue} → 本次${electricReading.readingValue}，用量${electricReading.consumption}`
+    electricInfo.value = `上次${electricReading.previousValue || '?'} → 本次${electricReading.readingValue}，用量${electricReading.consumption}`
     electricPhoto.value = electricReading.photoPath || ''
   }
 
-  const gasReading = db.getLatestReading(b.roomId, 'gas')
+  const allGas = db.getMeterReadingsByRoom(b.roomId)
+    .filter(r => r.meterType === 'gas')
+    .sort((a, b) => new Date(b.readingDate) - new Date(a.readingDate))
+  const gasReading = allGas.find(r => r.readingDate.startsWith(usageMonth)) || allGas[0]
   if (gasReading) {
-    gasInfo.value = `上次${gasReading.previousValue} → 本次${gasReading.readingValue}，用量${gasReading.consumption}`
+    gasInfo.value = `上次${gasReading.previousValue || '?'} → 本次${gasReading.readingValue}，用量${gasReading.consumption}`
   }
 
   // 滞纳金设置
   const settings = db.getSettings()
   lateFeePerDay.value = settings.lateFeePerDay || 5
+}
+
+function getPrevMonth(monthStr) {
+  const [y, m] = monthStr.split('-').map(Number)
+  if (m === 1) return `${y - 1}-12`
+  return `${y}-${String(m - 1).padStart(2, '0')}`
 }
 
 function togglePaid() {

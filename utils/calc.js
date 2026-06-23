@@ -18,37 +18,44 @@ export function calcUtilityFee(roomId, meterType, month, db) {
     .filter(r => r.meterType === meterType)
     .sort((a, b) => new Date(b.readingDate) - new Date(a.readingDate))
 
-  if (allReadings.length < 2 && !month) return 0
+  if (allReadings.length === 0) return 0
 
-  let latest, previous
+  let consumption = 0
+  let latest
 
   if (month) {
-    // 指定月份模式：找该月最新读数 + 该月之前最新读数
+    // 指定月份模式：优先找该月读数，找不到则回退到最新读数
     const thisMonthReadings = allReadings.filter(r => r.readingDate.startsWith(month))
-
-    if (thisMonthReadings.length === 0) {
-      // 该月没有抄表记录，无法计算该月费用
-      return 0
-    }
-
-    latest = thisMonthReadings[0]  // 该月最新的一条
-
-    // 找该月份之前的最近一条读数作为上期基准
-    const beforeThisMonth = allReadings.filter(r => r.readingDate < month + '-01')
-    if (beforeThisMonth.length === 0) {
-      // 没有历史读数（首次抄表），无法计算用量
-      return 0
-    }
-    previous = beforeThisMonth[0]
+    latest = thisMonthReadings.length > 0 ? thisMonthReadings[0] : allReadings[0]
   } else {
-    // 无月份模式（退租场景）：使用全局最新两条
+    // 无月份模式（退租场景）：至少需要两条记录
     if (allReadings.length < 2) return 0
     latest = allReadings[0]
-    previous = allReadings[1]
   }
 
-  const consumption = latest.readingValue - previous.readingValue
-  if (consumption <= 0) return 0  // 读数没变或倒退，费用为0
+  // 优先使用录入时已计算好的 consumption（addMeterReading 已正确对上期基准）
+  if (latest.consumption != null && latest.consumption > 0) {
+    consumption = latest.consumption
+  } else if (month) {
+    // 回退：按日期查找上期读数（非 isInitial）
+    const previous = allReadings.find(
+      r => r.readingDate < latest.readingDate && !r.isInitial && r.id !== latest.id
+    )
+    if (!previous) {
+      // 仍找不到 → 检查合同初始读数
+      const initialReading = allReadings.find(r => r.isInitial)
+      if (initialReading && initialReading.readingValue != null) {
+        consumption = latest.readingValue - initialReading.readingValue
+      }
+    } else {
+      consumption = latest.readingValue - previous.readingValue
+    }
+  } else {
+    // 无月份模式
+    consumption = latest.readingValue - allReadings[1].readingValue
+  }
+
+  if (consumption <= 0) return 0
 
   // 确定单价（使用 db.getRoomRate 统一取价）
   const rate = db.getRoomRate(roomId, meterType)

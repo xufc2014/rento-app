@@ -1094,9 +1094,19 @@ class Database {
     }
 
     const bills = this.getBills()
-    // 检查是否已存在该月该房间的账单
-    const existing = bills.find(b => b.roomId === roomId && b.month === month)
-    if (existing) return { error: `${month}月该房间账单已存在` }
+    // 如果已存在该月该房间的账单，替换之（支持重新生成）
+    const existingIdx = bills.findIndex(b => b.roomId === roomId && b.month === month)
+    if (existingIdx !== -1) {
+      // 保留原ID和支付状态
+      bill.id = bills[existingIdx].id
+      bill.status = bills[existingIdx].status
+      bill.paidAt = bills[existingIdx].paidAt
+      bills[existingIdx] = bill
+      this.set(KEYS.BILLS, bills)
+      this.logOperation('重新生成账单', 'bill', bill.id,
+        `${room.floor}-${room.roomNumber} ${month}月 ¥${totalAmount}`)
+      return bill
+    }
 
     bills.push(bill)
     this.set(KEYS.BILLS, bills)
