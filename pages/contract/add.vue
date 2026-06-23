@@ -45,10 +45,17 @@
     <!-- 步骤2：选择/新增租客 -->
     <view class="card" v-if="currentStep === 1">
       <view class="form-label">选择租客</view>
-      <view class="tenant-list" v-if="tenants.length > 0">
+
+      <!-- 搜索框 -->
+      <view class="search-wrap">
+        <input class="search-input" v-model="tenantSearch" placeholder="输入姓名搜索已有租客..." />
+      </view>
+
+      <!-- 搜索结果 -->
+      <view class="tenant-list" v-if="tenantSearch && filteredTenants.length > 0">
         <view
           class="tenant-item"
-          v-for="t in tenants"
+          v-for="t in filteredTenants"
           :key="t.id"
           :class="{ active: selectedTenantId === t.id }"
           @click="selectTenant(t.id)"
@@ -58,7 +65,14 @@
           <text class="tag tag-red" v-if="t.isBlacklisted">黑名单</text>
         </view>
       </view>
-      <text class="empty-hint" v-else>暂无租客，请先添加</text>
+      <text class="empty-hint" v-if="tenantSearch && filteredTenants.length === 0">未找到匹配的租客</text>
+      <text class="empty-hint" v-if="!tenantSearch">输入姓名搜索已有租客，或点击下方新增</text>
+
+      <!-- 已选中提示 -->
+      <view class="selected-hint" v-if="selectedTenantId">
+        <text class="selected-label">已选：</text>
+        <text class="selected-name">{{ confirmTenantName }}</text>
+      </view>
 
       <view class="btn-big btn-warning" style="margin-top: 16px;" @click="goAddTenant">新增租客</view>
 
@@ -351,6 +365,17 @@ const depositRules = ['押一付一', '押二付一', '押一付三']
 // 租客列表
 const tenants = ref([])
 
+// 搜索过滤
+const tenantSearch = ref('')
+const filteredTenants = computed(() => {
+  if (!tenantSearch.value) return []
+  const kw = tenantSearch.value.toLowerCase()
+  return tenants.value.filter(t =>
+    t.name.toLowerCase().includes(kw) ||
+    (t.phone && t.phone.includes(kw))
+  )
+})
+
 // 房间额外押金信息
 const roomExtraDeposit = ref(0)
 const roomExtraDepositNote = ref('')
@@ -436,8 +461,14 @@ onLoad((options) => {
 })
 
 onShow(() => {
-  // 从添加租客页面返回后刷新
+  // 从添加租客页面返回后刷新，并自动选中最新添加的租客
+  const prev = tenants.value
   tenants.value = db.getTenants()
+  // 如果之前没选租客，且租客列表变多了（新增了），自动选最新一条
+  if (!selectedTenantId.value && tenants.value.length > prev.length) {
+    selectedTenantId.value = tenants.value[tenants.value.length - 1].id
+    tenantSearch.value = ''
+  }
 })
 
 function selectBuilding(id) {
@@ -830,6 +861,42 @@ function submitContract() {
   display: block;
   text-align: center;
   padding: 16px 0;
+}
+
+.search-wrap {
+  margin-bottom: 12px;
+}
+
+.search-input {
+  height: 44px;
+  font-size: 15px;
+  border: 1px solid #dddddd;
+  border-radius: 8px;
+  padding: 0 14px;
+  background-color: #f8f8f8;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.selected-hint {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  background-color: #E3F2FD;
+  border-radius: 8px;
+  border: 1px solid #007AFF;
+  margin-top: 8px;
+}
+
+.selected-label {
+  font-size: 14px;
+  color: #666;
+}
+
+.selected-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #007AFF;
 }
 
 .extra-deposit-section {
