@@ -115,6 +115,15 @@
           >
             <view class="picker-text">{{ item.unitType }}</view>
           </picker>
+          <picker
+            class="template-picker"
+            mode="selector"
+            :range="layoutOptions"
+            :value="layoutOptions.indexOf(item.layout)"
+            @change="e => onTemplateLayoutChange(index, e)"
+          >
+            <view class="picker-text" :style="item.layout ? '' : 'color:#ccc'">{{ item.layout || '户型' }}</view>
+          </picker>
           <input
             class="template-input"
             type="digit"
@@ -186,6 +195,18 @@
           </picker>
         </view>
         <view class="form-row">
+          <text class="form-label">户型</text>
+          <picker
+            class="form-picker"
+            mode="selector"
+            :range="layoutOptions"
+            :value="layoutOptions.indexOf(manualLayout)"
+            @change="onManualLayoutChange"
+          >
+            <view class="picker-text" :style="manualLayout ? '' : 'color:#ccc'">{{ manualLayout || '请选择户型' }}</view>
+          </picker>
+        </view>
+        <view class="form-row">
           <text class="form-label">面积（m²）</text>
           <input
             class="form-input"
@@ -213,7 +234,7 @@
           <view class="manual-item" v-for="room in group.rooms" :key="room._index">
             <view class="manual-item-left">
               <text class="manual-room-number">{{ room.roomNumber }}</text>
-              <text class="manual-room-info">{{ room.unitType }} · {{ room.area }}m² · {{ formatAmount(room.baseRent) }}</text>
+              <text class="manual-room-info">{{ room.unitType }}{{ room.layout ? ' · ' + room.layout : '' }} · {{ room.area }}m² · {{ formatAmount(room.baseRent) }}</text>
             </view>
             <text class="manual-delete" @click="removeManualRoom(room._index)">删除</text>
           </view>
@@ -250,6 +271,7 @@ const endFloor = ref(16)
 const totalFloors = computed(() => Math.max(0, endFloor.value - startFloor.value + 1))
 const roomsPerFloor = ref(5)
 const unitTypes = ['民房', '公寓', '商铺']
+const layoutOptions = ['单间', '一房一厅', '两房一厅', '三房一厅', '其他']
 const defaultUnitPattern = ['民房', '民房', '公寓', '公寓', '商铺']
 const unitTemplates = ref([])
 
@@ -257,6 +279,7 @@ const floorOptions = Array.from({ length: 60 }, (_, i) => i + 1)
 const currentFloor = ref(1)
 const manualRoomNumber = ref('')
 const manualUnitType = ref('民房')
+const manualLayout = ref('')
 const manualArea = ref('')
 const manualRent = ref('')
 const manualRooms = ref([])
@@ -277,6 +300,7 @@ const previewFloors = computed(() => {
     const rooms = unitTemplates.value.map(t => ({
       roomNumber: `${f}${t.unit}`,
       unitType: t.unitType,
+      layout: t.layout || '',
       area: Number(t.area) || 0,
       baseRent: Number(t.baseRent) || 0,
       isCommercial: t.unitType === '商铺'
@@ -316,6 +340,7 @@ function resetUnitTemplates() {
     templates.push({
       unit: String(i).padStart(2, '0'),
       unitType: defaultUnitPattern[(i - 1) % defaultUnitPattern.length] || '民房',
+      layout: '',
       area: '',
       baseRent: ''
     })
@@ -379,6 +404,11 @@ function onTemplateTypeChange(index, e) {
   unitTemplates.value[index].unitType = unitTypes[typeIndex]
 }
 
+function onTemplateLayoutChange(index, e) {
+  const layoutIndex = Number(e.detail.value)
+  unitTemplates.value[index].layout = layoutOptions[layoutIndex]
+}
+
 function saveBatch() {
   if (!existingBuildingId.value && !buildingName.value.trim()) {
     uni.showToast({ title: '请输入楼栋名称', icon: 'none' })
@@ -436,6 +466,10 @@ function onManualTypeChange(e) {
   manualUnitType.value = unitTypes[Number(e.detail.value)]
 }
 
+function onManualLayoutChange(e) {
+  manualLayout.value = layoutOptions[Number(e.detail.value)]
+}
+
 function addManualRoom() {
   if (!manualRoomNumber.value.trim()) {
     uni.showToast({ title: '请输入房号', icon: 'none' })
@@ -446,6 +480,7 @@ function addManualRoom() {
     floor: currentFloor.value,
     roomNumber: manualRoomNumber.value.trim(),
     unitType: manualUnitType.value,
+    layout: manualLayout.value || '',
     area: Number(manualArea.value) || 0,
     baseRent: Number(manualRent.value) || 0,
     isCommercial: manualUnitType.value === '商铺'
@@ -453,6 +488,7 @@ function addManualRoom() {
 
   // 清空房号，保留楼层和类型提高录入效率
   manualRoomNumber.value = ''
+  manualLayout.value = ''
   manualArea.value = ''
   manualRent.value = ''
 
@@ -497,6 +533,7 @@ function saveManual() {
       floor: room.floor,
       roomNumber: room.roomNumber,
       unitType: room.unitType,
+      layout: room.layout || '',
       area: room.area,
       baseRent: room.baseRent,
       isCommercial: room.isCommercial

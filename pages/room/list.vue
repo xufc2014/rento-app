@@ -13,9 +13,34 @@
       </view>
     </scroll-view>
 
+    <!-- 筛选栏（状态 + 户型） -->
+    <view class="filter-bar" v-if="buildings.length > 0 && rooms.length > 0">
+      <scroll-view scroll-x class="filter-scroll">
+        <view class="filter-chips">
+          <view
+            class="chip"
+            v-for="s in statusFilters"
+            :key="s.value"
+            :class="{ 'chip-active': filterStatus === s.value }"
+            @click="filterStatus = s.value"
+          >{{ s.label }}</view>
+          <view class="chip-divider"></view>
+          <view
+            class="chip"
+            v-for="l in layoutFilters"
+            :key="l.value"
+            :class="{ 'chip-active': filterLayout === l.value }"
+            @click="filterLayout = l.value"
+          >{{ l.label }}</view>
+        </view>
+      </scroll-view>
+    </view>
+
     <!-- 统计 + 编辑按钮 -->
     <view class="summary-bar" v-if="buildings.length > 0">
-      <text class="summary-text">{{ currentBuildingName }}：共 {{ groupedRooms.length }} 层 / {{ roomCount }} 间房</text>
+      <text class="summary-text">{{ currentBuildingName }}：共 {{ filteredRoomCount }} 间
+        <text v-if="isFiltering" class="filter-hint">（已筛选）</text>
+      </text>
       <view
         class="edit-toggle-btn"
         :class="{ active: editMode }"
@@ -95,7 +120,7 @@
               <text class="room-number">{{ room.roomNumber }}</text>
               <text class="tag" :class="statusClass(room.status)">{{ room.status }}</text>
             </view>
-            <text class="room-type">{{ room.unitType }}</text>
+            <text class="room-type">{{ [room.unitType, room.layout].filter(Boolean).join(' · ') }}</text>
             <view class="room-info">
               <text class="room-area">{{ room.area || 0 }} m²</text>
               <text class="room-rent">{{ formatAmount(room.baseRent || 0) }}</text>
@@ -162,6 +187,27 @@ const rooms = ref([])
 const editMode = ref(false)
 const selectedIds = ref(new Set())
 
+// 筛选
+const filterStatus = ref('全部')
+const filterLayout = ref('全部')
+
+const statusFilters = [
+  { label: '全部', value: '全部' },
+  { label: '空置', value: '空置' },
+  { label: '已入住', value: '已入住' },
+  { label: '已预订', value: '已预订' },
+  { label: '退租中', value: '退租中' }
+]
+
+const layoutFilters = [
+  { label: '所有户型', value: '全部' },
+  { label: '单间', value: '单间' },
+  { label: '一房一厅', value: '一房一厅' },
+  { label: '两房一厅', value: '两房一厅' },
+  { label: '三房一厅', value: '三房一厅' },
+  { label: '其他', value: '其他' }
+]
+
 // 密码确认控制器
 const pwd = usePasswordGuard()
 
@@ -181,6 +227,19 @@ const currentBuildingName = computed(() => {
 
 const roomCount = computed(() => rooms.value.length)
 
+const isFiltering = computed(() => filterStatus.value !== '全部' || filterLayout.value !== '全部')
+
+// 筛选后的房间列表
+const filteredRooms = computed(() => {
+  return rooms.value.filter(r => {
+    const statusOk = filterStatus.value === '全部' || r.status === filterStatus.value
+    const layoutOk = filterLayout.value === '全部' || (r.layout || '') === filterLayout.value
+    return statusOk && layoutOk
+  })
+})
+
+const filteredRoomCount = computed(() => filteredRooms.value.length)
+
 function floorSortKey(floor) {
   const n = Number(floor)
   return isNaN(n) ? 99999 : n
@@ -192,7 +251,7 @@ function roomSortKey(roomNumber) {
 }
 
 const groupedRooms = computed(() => {
-  const sorted = [...rooms.value].sort((a, b) => {
+  const sorted = [...filteredRooms.value].sort((a, b) => {
     const floorDiff = floorSortKey(a.floor) - floorSortKey(b.floor)
     if (floorDiff !== 0) return floorDiff
     return roomSortKey(a.roomNumber) - roomSortKey(b.roomNumber)
@@ -237,6 +296,8 @@ function switchBuilding(id) {
   }
   activeBuildingId.value = id
   rooms.value = db.getRoomsByBuilding(id)
+  filterStatus.value = '全部'
+  filterLayout.value = '全部'
 }
 
 function goRoomDetail(roomId) {
@@ -382,6 +443,57 @@ function doDelete() {
   background-color: #ffffff;
   padding: 0 8px;
   border-bottom: 1px solid #eeeeee;
+}
+
+/* ===== 筛选栏 ===== */
+.filter-bar {
+  background-color: #ffffff;
+  border-bottom: 1px solid #f0f0f0;
+  padding: 8px 0;
+}
+
+.filter-scroll {
+  width: 100%;
+  white-space: nowrap;
+}
+
+.filter-chips {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.chip {
+  display: inline-block;
+  padding: 5px 12px;
+  border-radius: 16px;
+  background-color: #f5f5f5;
+  font-size: 13px;
+  color: #666666;
+  border: 1px solid transparent;
+  flex-shrink: 0;
+}
+
+.chip-active {
+  background-color: #e8f4ff;
+  color: #007AFF;
+  border-color: #007AFF;
+  font-weight: 600;
+}
+
+.chip-divider {
+  width: 1px;
+  height: 20px;
+  background-color: #e0e0e0;
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+.filter-hint {
+  font-size: 12px;
+  color: #007AFF;
 }
 
 .tab-item {

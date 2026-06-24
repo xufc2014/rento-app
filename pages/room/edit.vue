@@ -36,6 +36,19 @@
           </picker>
         </view>
         <view class="form-item">
+          <text class="form-label">户型</text>
+          <picker
+            :value="layoutIndex"
+            :range="layoutOptions"
+            @change="onLayoutChange"
+          >
+            <view class="form-picker">
+              <text :style="form.layout ? '' : 'color:#ccc'">{{ form.layout || '请选择户型' }}</text>
+              <text class="picker-arrow">›</text>
+            </view>
+          </picker>
+        </view>
+        <view class="form-item">
           <text class="form-label">面积（m²）</text>
           <input
             class="form-input"
@@ -164,9 +177,11 @@ export default {
       buildingName: '',
       settings: {},
       unitTypeOptions: ['民房', '公寓', '商铺'],
+      layoutOptions: ['单间', '一房一厅', '两房一厅', '三房一厅', '其他'],
       form: {
         roomNumber: '',
         unitType: '民房',
+        layout: '',
         area: '',
         baseRent: '',
         waterRate: '',
@@ -182,6 +197,10 @@ export default {
     unitTypeIndex() {
       const idx = this.unitTypeOptions.indexOf(this.form.unitType)
       return idx >= 0 ? idx : 0
+    },
+    layoutIndex() {
+      const idx = this.layoutOptions.indexOf(this.form.layout)
+      return idx >= 0 ? idx : -1
     },
     typeDefaultWaterRate() {
       const typeRates = this.settings.typeRates || {}
@@ -212,6 +231,7 @@ export default {
       this.form = {
         roomNumber: r.roomNumber || '',
         unitType: r.unitType || '民房',
+        layout: r.layout || '',
         area: r.area != null ? String(r.area) : '',
         baseRent: r.baseRent != null ? String(r.baseRent) : '',
         waterRate: r.waterRate ? String(r.waterRate) : '',
@@ -224,6 +244,9 @@ export default {
     },
     onUnitTypeChange(e) {
       this.form.unitType = this.unitTypeOptions[e.detail.value]
+    },
+    onLayoutChange(e) {
+      this.form.layout = this.layoutOptions[e.detail.value]
     },
     onSave() {
       if (!this.form.roomNumber.trim()) {
@@ -238,6 +261,7 @@ export default {
       const updates = {
         roomNumber: this.form.roomNumber.trim(),
         unitType: this.form.unitType,
+        layout: this.form.layout || '',
         area: this.form.area ? Number(this.form.area) : 0,
         baseRent: Number(this.form.baseRent),
         isCommercial: this.form.unitType === '商铺',
