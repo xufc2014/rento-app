@@ -73,6 +73,11 @@
           <view class="reading-footer" v-if="reading.isAnomaly">
             <text class="reading-anomaly">⚠️ {{ reading.anomalyType || '异常' }}</text>
           </view>
+
+          <view class="reading-photo-row" v-if="reading.photoPath" @click="previewPhoto(reading.photoPath)">
+            <image class="reading-photo-thumb" :src="reading.photoPath" mode="aspectFill" />
+            <text class="reading-photo-label">点击查看表盘照片</text>
+          </view>
         </view>
       </view>
     </view>
@@ -265,6 +270,13 @@ function confirmEdit() {
 
   uni.showToast({ title: '修改成功', icon: 'success' })
   closeEdit()
+}
+
+function previewPhoto(photoPath) {
+  uni.previewImage({
+    urls: [photoPath],
+    current: photoPath
+  })
 }
 </script>
 
@@ -494,6 +506,28 @@ function confirmEdit() {
   font-size: 24rpx;
   color: #FF4D4F;
   font-weight: 500;
+}
+
+.reading-photo-row {
+  display: flex;
+  align-items: center;
+  margin-top: 12rpx;
+  padding-top: 10rpx;
+  border-top: 1rpx solid #f0f0f0;
+}
+
+.reading-photo-thumb {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 8rpx;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.reading-photo-label {
+  font-size: 24rpx;
+  color: #007AFF;
+  margin-left: 14rpx;
 }
 
 /* ========== 空状态 ========== */

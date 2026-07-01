@@ -601,11 +601,26 @@ function takePhoto(type) {
     count: 1,
     sourceType: ['camera', 'album'],
     success: (res) => {
-      if (type === 'water') {
-        waterPhotoPath.value = res.tempFilePaths[0]
-      } else {
-        electricPhotoPath.value = res.tempFilePaths[0]
-      }
+      const tempPath = res.tempFilePaths[0]
+      // 将临时路径转存为永久本地文件，App 重启后仍可访问
+      uni.saveFile({
+        tempFilePath: tempPath,
+        success: (saveRes) => {
+          if (type === 'water') {
+            waterPhotoPath.value = saveRes.savedFilePath
+          } else {
+            electricPhotoPath.value = saveRes.savedFilePath
+          }
+        },
+        fail: () => {
+          // saveFile 不支持的平台（如 H5）直接使用临时路径
+          if (type === 'water') {
+            waterPhotoPath.value = tempPath
+          } else {
+            electricPhotoPath.value = tempPath
+          }
+        }
+      })
     },
     fail: () => {
       uni.showToast({ title: '获取图片失败', icon: 'none' })
